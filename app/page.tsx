@@ -22,19 +22,19 @@ const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: currentYear - 2000 + 2 }, (_, i) => currentYear + 1 - i);
 
 // Helper to format dates for API (YYYY-MM-DD)
-const formatDateAPI = (date) => {
+const formatDateAPI = (date: Date): string => {
   return date.toISOString().split('T')[0];
 };
 
 // Helper to format ISO time strings to 'h:mm AM/PM'
-const formatTime = (isoString) => {
+const formatTime = (isoString: string | undefined): string => {
   if (!isoString || !isoString.includes('T')) return 'N/A';
   const date = new Date(isoString);
   return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 };
 
 // Helper to format duration in seconds to 'Hh Mm'
-const formatDuration = (seconds) => {
+const formatDuration = (seconds: number | undefined): string => {
   if (typeof seconds !== 'number' || seconds < 0) return 'N/A';
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -43,13 +43,32 @@ const formatDuration = (seconds) => {
 
 // --- Components ---
 
+interface WeatherData {
+  [key: string]: {
+    precipitation: number;
+    snowfall: number;
+    tempMax: number;
+    tempMin: number;
+    windSpeed: number;
+    sunrise: string;
+    sunset: string;
+    daylightDuration: number;
+  };
+}
+
+interface Location {
+  name: string;
+  lat: number;
+  lon: number;
+}
+
 export default function App() {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [location, setLocation] = useState(LOCATIONS[0]);
-  const [weatherData, setWeatherData] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [location, setLocation] = useState<Location>(LOCATIONS[0]);
+  const [weatherData, setWeatherData] = useState<WeatherData>({});
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Derived state for calendar generation
   const year = currentDate.getFullYear();
@@ -91,9 +110,9 @@ export default function App() {
         if (!response.ok) throw new Error('Weather data unavailable');
         const data = await response.json();
 
-        const processed = {};
+        const processed: WeatherData = {};
         if (data.daily && data.daily.time) {
-          data.daily.time.forEach((time, index) => {
+          data.daily.time.forEach((time: string, index: number) => {
             processed[time] = {
               precipitation: data.daily.precipitation_sum[index],
               snowfall: data.daily.snowfall_sum[index],
@@ -109,7 +128,8 @@ export default function App() {
 
         setWeatherData(processed);
       } catch (err) {
-        setError(err.message || 'Failed to fetch data');
+        const errorMessage = err instanceof Error ? err.message : 'Failed to fetch data';
+        setError(errorMessage);
         setWeatherData({});
       } finally {
         setLoading(false);
@@ -121,8 +141,8 @@ export default function App() {
 
   // --- Render Helpers ---
 
-  const renderCalendarDays = () => {
-    const days = [];
+  const renderCalendarDays = (): React.ReactNode[] => {
+    const days: React.ReactNode[] = [];
     
     // Empty cells before month starts
     for (let i = 0; i < firstDayOfMonth; i++) {
