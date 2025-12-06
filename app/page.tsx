@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { CloudRain, Snowflake, Calendar as CalendarIcon, MapPin, Droplets, Thermometer, Wind, ChevronDown, Sunrise, Sunset, Clock } from 'lucide-react';
 
