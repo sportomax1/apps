@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Snowflake, Droplets, Thermometer, Wind, Sunrise, Sunset, Clock } from 'lucide-react';
+import { Snowflake, Droplets, Thermometer, Wind, Sunrise, Sunset, Clock, Search, MapPin, Calendar, History, RotateCcw } from 'lucide-react';
 
 // --- Configuration & Helpers ---
 
-const LOCATIONS = [
+const DEFAULT_LOCATIONS = [
   { name: 'Parker, CO', lat: 39.5186, lon: -104.7614 },
   { name: 'Uehling, NE', lat: 41.7336, lon: -96.5028 },
   { name: 'San Diego, CA', lat: 32.7157, lon: -117.1611 },
@@ -46,10 +46,17 @@ const formatDuration = (seconds) => {
 export default function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [location, setLocation] = useState(LOCATIONS[0]);
+  const [locations, setLocations] = useState(DEFAULT_LOCATIONS);
+  const [location, setLocation] = useState(DEFAULT_LOCATIONS[0]);
   const [weatherData, setWeatherData] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  
+  // Search & History State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [historicalAverages, setHistoricalAverages] = useState(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Derived state for calendar generation
   const year = currentDate.getFullYear();
@@ -57,6 +64,114 @@ export default function App() {
   
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDayOfMonth = new Date(year, month, 1).getDay();
+
+  // --- Actions ---
+
+  const handleJumpToToday = () => {
+    const today = new Date();
+    setCurrentDate(today);
+    setSelectedDate(today);
+  };
+
+  const handleCurrentLocation = () => {
+    if (navigator.geolocation) {
+      setLoading(true);
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const newLoc = {
+            name: 'My Location',
+            lat: position.coords.latitude,
+            lon: position.coords.longitude
+          };
+          setLocations(prev => [...prev, newLoc]);
+          setLocation(newLoc);
+          setLoading(false);
+        },
+        (err) => {
+          setError('Location access denied');
+          setLoading(false);
+        }
+      );
+    } else {
+      setError('Geolocation not supported');
+    }
+  };
+
+  const handleSearchLocation = async (e) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    setIsSearching(true);
+    try {
+      const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchQuery)}&count=1&language=en&format=json`);
+      const data = await res.json();
+      
+      if (data.results && data.results.length > 0) {
+        const result = data.results[0];
+        const newLoc = {
+          name: `${result.name}, ${result.admin1 || result.country_code}`,
+          lat: result.latitude,
+          lon: result.longitude
+        };
+        setLocations(prev => [...prev, newLoc]);
+        setLocation(newLoc);
+        setSearchQuery('');
+      } else {
+        setError('Location not found');
+      }
+    } catch (err) {
+      setError('Search failed');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const fetchHistoricalComparison = async () => {
+    setLoadingHistory(true);
+    setHistoricalAverages(null);
+    
+    try {
+      // Fetch last 10 years for the selected date
+      const month = selectedDate.getMonth() + 1;
+      const day = selectedDate.getDate();
+      const currentYear = new Date().getFullYear();
+      
+      // We'll fetch a range that covers the last 10 years for this specific day
+      // Since we can't fetch disjoint dates easily, we'll fetch the last 10 years of daily data
+      // for the specific month, then filter client side.
+      // Optimization: Just fetch the specific day for each year in parallel?
+      // Actually, Open-Meteo is fast. Let's fetch the last 10 years for the selected date.
+      
+      const yearsToFetch = [1, 3, 10]; // 1 year ago, 3 years ago, 10 years ago
+      const historyData = {};
+
+      await Promise.all(yearsToFetch.map(async (yearsAgo) => {
+        const targetYear = currentYear - yearsAgo;
+        const dateStr = `${targetYear}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+        
+        const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location.lat}&longitude=${location.lon}&start_date=${dateStr}&end_date=${dateStr}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
+        
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        if (data.daily && data.daily.time && data.daily.time.length > 0) {
+          historyData[yearsAgo] = {
+            year: targetYear,
+            tempMax: data.daily.temperature_2m_max[0],
+            tempMin: data.daily.temperature_2m_min[0],
+            precip: data.daily.precipitation_sum[0],
+            snow: data.daily.snowfall_sum[0]
+          };
+        }
+      }));
+
+      setHistoricalAverages(historyData);
+    } catch (err) {
+      console.error('Failed to fetch history', err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   // --- Data Fetching ---
 
@@ -175,45 +290,87 @@ export default function App() {
         {/* Controls */}
         <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Location Selector */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
-              <select
-                value={LOCATIONS.indexOf(location)}
-                onChange={(e) => setLocation(LOCATIONS[parseInt(e.target.value)])}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                {LOCATIONS.map((loc, i) => (
-                  <option key={i} value={i}>{loc.name}</option>
-                ))}
-              </select>
+            {/* Location Selector & Search */}
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
+                  <select
+                    value={locations.indexOf(location)}
+                    onChange={(e) => setLocation(locations[parseInt(e.target.value)])}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    {locations.map((loc, i) => (
+                      <option key={i} value={i}>{loc.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={handleCurrentLocation}
+                    className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+                    title="Use Current Location"
+                  >
+                    <MapPin size={24} />
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleSearchLocation} className="flex gap-2">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search city..."
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="submit"
+                  disabled={isSearching}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
+                >
+                  {isSearching ? <div className="animate-spin">⌛</div> : <Search size={20} />}
+                </button>
+              </form>
             </div>
 
-            {/* Month/Year Selector */}
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Month</label>
-                <select
-                  value={month}
-                  onChange={(e) => setCurrentDate(new Date(year, parseInt(e.target.value), 1))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  {MONTHS.map((m, i) => (
-                    <option key={i} value={i}>{m}</option>
-                  ))}
-                </select>
+            {/* Month/Year Selector & Tools */}
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Month</label>
+                  <select
+                    value={month}
+                    onChange={(e) => setCurrentDate(new Date(year, parseInt(e.target.value), 1))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    {MONTHS.map((m, i) => (
+                      <option key={i} value={i}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
+                  <select
+                    value={year}
+                    onChange={(e) => setCurrentDate(new Date(parseInt(e.target.value), month, 1))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    {YEARS.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
-                <select
-                  value={year}
-                  onChange={(e) => setCurrentDate(new Date(parseInt(e.target.value), month, 1))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              
+              <div className="flex justify-end">
+                <button
+                  onClick={handleJumpToToday}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
                 >
-                  {YEARS.map((y) => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
+                  <RotateCcw size={18} />
+                  Jump to Today
+                </button>
               </div>
             </div>
           </div>
@@ -314,6 +471,50 @@ export default function App() {
             ) : (
               <p className="text-gray-600">No data available for this date</p>
             )}
+
+            {/* Historical Comparison Section */}
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                  <History size={18} />
+                  Historical Context
+                </h4>
+                <button
+                  onClick={fetchHistoricalComparison}
+                  disabled={loadingHistory}
+                  className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
+                >
+                  {loadingHistory ? 'Loading...' : 'Analyze History'}
+                </button>
+              </div>
+
+              {historicalAverages && (
+                <div className="space-y-3">
+                  {[1, 3, 10].map((yearsAgo) => {
+                    const data = historicalAverages[yearsAgo];
+                    if (!data) return null;
+                    return (
+                      <div key={yearsAgo} className="text-sm bg-gray-50 p-2 rounded">
+                        <div className="flex justify-between font-medium text-gray-700 mb-1">
+                          <span>{data.year} ({yearsAgo}y ago)</span>
+                          <span>{data.tempMax}° / {data.tempMin}°</span>
+                        </div>
+                        <div className="flex gap-3 text-xs text-gray-500">
+                          {data.precip > 0 && <span>💧 {data.precip}"</span>}
+                          {data.snow > 0 && <span>❄ {data.snow}"</span>}
+                          {data.precip === 0 && data.snow === 0 && <span>No precip</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {!historicalAverages && !loadingHistory && (
+                <p className="text-xs text-gray-500 italic">
+                  Click "Analyze History" to compare this date with previous years (1y, 3y, 10y ago).
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>
