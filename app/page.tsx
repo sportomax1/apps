@@ -436,16 +436,16 @@ export default function App() {
           key={day}
           onClick={() => setSelectedDate(date)}
           className={`
-            aspect-square rounded-lg p-2 text-sm font-medium transition-colors
+            aspect-square rounded-lg p-1 md:p-2 text-xs md:text-sm font-medium transition-colors flex flex-col items-center justify-start
             ${isSelected ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}
-            ${data?.precipitation > 0 || data?.snowfall > 0 ? 'ring-2 ring-blue-400' : ''}
+            ${data?.precipitation > 0 || data?.snowfall > 0 ? 'ring-1 md:ring-2 ring-blue-400' : ''}
           `}
         >
           <div>{day}</div>
           {data && (
-            <div className="text-xs mt-1">
-              {data.snowfall > 0 && <div className="text-blue-600">❄ {data.snowfall}"</div>}
-              {data.precipitation > 0 && data.snowfall === 0 && <div className="text-blue-500">💧 {data.precipitation}"</div>}
+            <div className="text-[10px] md:text-xs mt-0.5 md:mt-1 leading-tight">
+              {data.snowfall > 0 && <div className="text-blue-600 font-bold">❄ {data.snowfall}"</div>}
+              {data.precipitation > 0 && data.snowfall === 0 && <div className="text-blue-500 font-bold">💧 {data.precipitation}"</div>}
             </div>
           )}
         </button>
@@ -459,17 +459,17 @@ export default function App() {
   const selectedData = weatherData[selectedDateStr];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-400 to-blue-600 p-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-400 to-blue-600 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Weather Forecast</h1>
-          <p className="text-blue-100">Historical and predicted weather data</p>
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-4xl font-bold text-white mb-2">Weather Forecast</h1>
+          <p className="text-blue-100 text-sm md:text-base">Historical and predicted weather data</p>
         </div>
 
         {/* Controls */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
+          <div className="flex flex-col md:grid md:grid-cols-2 gap-6">
             {/* Location Selector & Search */}
             <div className="space-y-4">
               <div className="flex gap-2">
@@ -526,11 +526,11 @@ export default function App() {
                 
                 <div className="flex-1 flex gap-2">
                   <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Month</label>
+                    <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">Month</label>
                     <select
                       value={month}
                       onChange={(e) => setCurrentDate(new Date(year, parseInt(e.target.value), 1))}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-2 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                     >
                       {MONTHS.map((m, i) => (
                         <option key={i} value={i}>{m}</option>
@@ -538,11 +538,11 @@ export default function App() {
                     </select>
                   </div>
                   <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
+                    <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">Year</label>
                     <select
                       value={year}
                       onChange={(e) => setCurrentDate(new Date(parseInt(e.target.value), month, 1))}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-2 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                     >
                       {YEARS.map((y) => (
                         <option key={y} value={y}>{y}</option>
@@ -559,13 +559,13 @@ export default function App() {
                 </button>
               </div>
               
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-col md:flex-row justify-end gap-2">
                 <button
                   onClick={() => {
                     setShowGraph(true);
                     fetchGraphData();
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm md:text-base"
                 >
                   <LineChartIcon size={18} />
                   Graph View
@@ -575,14 +575,14 @@ export default function App() {
                     setShowHistoryGrid(true);
                     fetchGridHistory();
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-sm md:text-base"
                 >
                   <BarChart3 size={18} />
                   History Grid
                 </button>
                 <button
                   onClick={handleJumpToToday}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm md:text-base"
                 >
                   <RotateCcw size={18} />
                   Jump to Today
@@ -595,11 +595,11 @@ export default function App() {
         {/* History Grid Modal */}
         {showHistoryGrid && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-              <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col m-4">
+              <div className="p-4 md:p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-800">Historical Analysis</h2>
-                  <p className="text-gray-600 text-sm">{location.name}</p>
+                  <h2 className="text-xl md:text-2xl font-bold text-gray-800">Historical Analysis</h2>
+                  <p className="text-gray-600 text-xs md:text-sm">{location.name}</p>
                 </div>
                 <button 
                   onClick={() => setShowHistoryGrid(false)}
@@ -609,23 +609,23 @@ export default function App() {
                 </button>
               </div>
               
-              <div className="p-6 overflow-auto flex-1">
-                <div className="flex gap-4 mb-6">
+              <div className="p-4 md:p-6 overflow-auto flex-1">
+                <div className="flex flex-wrap gap-2 md:gap-4 mb-4 md:mb-6">
                   <button
                     onClick={() => setGridMetric('temp')}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${gridMetric === 'temp' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    className={`px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${gridMetric === 'temp' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                   >
                     Avg Temperature
                   </button>
                   <button
                     onClick={() => setGridMetric('precip')}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${gridMetric === 'precip' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    className={`px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${gridMetric === 'precip' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                   >
                     Total Precipitation
                   </button>
                   <button
                     onClick={() => setGridMetric('snow')}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${gridMetric === 'snow' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    className={`px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${gridMetric === 'snow' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                   >
                     Total Snowfall
                   </button>
@@ -684,11 +684,11 @@ export default function App() {
         {/* Graph View Modal */}
         {showGraph && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col">
-              <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col m-4">
+              <div className="p-4 md:p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-800">Historical Trends</h2>
-                  <p className="text-gray-600 text-sm">{location.name} - Multi-Year Comparison</p>
+                  <h2 className="text-xl md:text-2xl font-bold text-gray-800">Historical Trends</h2>
+                  <p className="text-gray-600 text-xs md:text-sm">{location.name} - Multi-Year Comparison</p>
                 </div>
                 <button 
                   onClick={() => setShowGraph(false)}
@@ -698,26 +698,26 @@ export default function App() {
                 </button>
               </div>
               
-              <div className="p-6 flex-1 flex flex-col min-h-0">
+              <div className="p-4 md:p-6 flex-1 flex flex-col min-h-0">
                 {/* Controls */}
-                <div className="flex flex-col gap-4 mb-6">
+                <div className="flex flex-col gap-4 mb-4 md:mb-6">
                   {/* Metric Toggles */}
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => setGraphMetric('snow')}
-                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${graphMetric === 'snow' ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                      className={`px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${graphMetric === 'snow' ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                     >
                       Snowfall
                     </button>
                     <button
                       onClick={() => setGraphMetric('temp')}
-                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${graphMetric === 'temp' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                      className={`px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${graphMetric === 'temp' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                     >
                       Max Temp
                     </button>
                     <button
                       onClick={() => setGraphMetric('daylight')}
-                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${graphMetric === 'daylight' ? 'bg-yellow-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                      className={`px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${graphMetric === 'daylight' ? 'bg-yellow-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                     >
                       Daylight
                     </button>
@@ -841,9 +841,9 @@ export default function App() {
             {error && <p className="text-red-600">Error: {error}</p>}
 
             {!loading && !error && (
-              <div className="grid grid-cols-7 gap-2">
+              <div className="grid grid-cols-7 gap-1 md:gap-2">
                 {DAYS_OF_WEEK.map((day) => (
-                  <div key={day} className="text-center font-semibold text-gray-600 text-sm mb-2">
+                  <div key={day} className="text-center font-semibold text-gray-600 text-xs md:text-sm mb-1 md:mb-2">
                     {day}
                   </div>
                 ))}
