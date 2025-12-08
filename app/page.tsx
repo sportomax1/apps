@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Snowflake, Droplets, Thermometer, Wind, Sunrise, Sunset, Clock, Search, MapPin, Calendar, History, RotateCcw, ChevronLeft, ChevronRight, BarChart3, X } from 'lucide-react';
+import { Snowflake, Droplets, Thermometer, Wind, Sunrise, Sunset, Clock, Search, MapPin, Calendar, History, RotateCcw, ChevronLeft, ChevronRight, BarChart3, X, LineChart as LineChartIcon } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 // --- Configuration & Helpers ---
 
@@ -63,6 +64,13 @@ export default function App() {
   const [gridData, setGridData] = useState(null);
   const [loadingGrid, setLoadingGrid] = useState(false);
   const [gridMetric, setGridMetric] = useState('temp'); // 'temp', 'precip', 'snow'
+
+  // Snow Graph State
+  const [showSnowGraph, setShowSnowGraph] = useState(false);
+  const [snowGraphData, setSnowGraphData] = useState([]);
+  const [loadingSnowGraph, setLoadingSnowGraph] = useState(false);
+  const [snowGraphYears, setSnowGraphYears] = useState([]);
+  const [visibleYears, setVisibleYears] = useState({});
 
   // Derived state for calendar generation
   const year = currentDate.getFullYear();
@@ -240,7 +248,81 @@ export default function App() {
   // Clear grid data when location changes
   useEffect(() => {
     setGridData(null);
+    setSnowGraphData([]);
   }, [location]);
+
+  const fetchSnowGraph = async () => {
+    if (snowGraphData.length > 0) return;
+    
+    setLoadingSnowGraph(true);
+    try {
+      const currentYear = new Date().getFullYear();
+      const years = [currentYear, currentYear - 1, currentYear - 2, currentYear - 3, currentYear - 4];
+      setSnowGraphYears(years);
+      
+      // Initialize visible years (all true by default)
+      const initialVisible = {};
+      years.forEach(y => initialVisible[y] = true);
+      setVisibleYears(initialVisible);
+
+      const startDate = `${years[years.length - 1]}-01-01`;
+      
+      // Clamp endDate to yesterday
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 5);
+      const endDate = formatDateAPI(yesterday);
+      
+      const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location.lat}&longitude=${location.lon}&start_date=${startDate}&end_date=${endDate}&daily=snowfall_sum&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
+      
+      const res = await fetch(url);
+      const data = await res.json();
+      
+      if (!data.daily) throw new Error('No data');
+
+      // Create a base array of 366 days (using 2020 as leap year template)
+      const daysInYear = [];
+      const tempDate = new Date(2020, 0, 1); 
+      for (let i = 0; i < 366; i++) {
+        const m = tempDate.getMonth();
+        const d = tempDate.getDate();
+        const label = `${MONTHS[m].substring(0, 3)} ${d}`;
+        
+        const dayObj = {
+            label: label,
+            month: m,
+            day: d
+        };
+        // Initialize all years to 0 or null
+        years.forEach(y => dayObj[y] = null);
+        
+        daysInYear.push(dayObj);
+        tempDate.setDate(tempDate.getDate() + 1);
+      }
+
+      // Fill in data
+      data.daily.time.forEach((dateStr, i) => {
+        const [yStr, mStr, dStr] = dateStr.split('-');
+        const y = parseInt(yStr);
+        const m = parseInt(mStr) - 1;
+        const d = parseInt(dStr);
+        
+        if (!years.includes(y)) return;
+
+        const dayIndex = daysInYear.findIndex(item => item.month === m && item.day === d);
+
+        if (dayIndex !== -1) {
+            daysInYear[dayIndex][y] = data.daily.snowfall_sum[i];
+        }
+      });
+
+      setSnowGraphData(daysInYear);
+
+    } catch (err) {
+      console.error('Snow graph fetch failed', err);
+    } finally {
+      setLoadingSnowGraph(false);
+    }
+  };
 
   // --- Data Fetching ---
 
@@ -464,6 +546,16 @@ export default function App() {
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => {
+                    setShowSnowGraph(true);
+                    fetchSnowGraph();
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+                >
+                  <LineChartIcon size={18} />
+                  Snow Graph
+                </button>
+                <button
+                  onClick={() => {
                     setShowHistoryGrid(true);
                     fetchGridHistory();
                   }}
@@ -566,6 +658,92 @@ export default function App() {
                   </div>
                 ) : (
                   <p className="text-center text-gray-500">No data available</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Snow Graph Modal */}
+        {showSnowGraph && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[80vh] flex flex-col">
+              <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">Snowfall Comparison</h2>
+                  <p className="text-gray-600 text-sm">{location.name} - Daily Snowfall Totals</p>
+                </div>
+                <button 
+                  onClick={() => setShowSnowGraph(false)}
+                  className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="p-6 flex-1 flex flex-col min-h-0">
+                {/* Year Toggles */}
+                <div className="flex flex-wrap gap-4 mb-6">
+                  {snowGraphYears.map((y, i) => {
+                    const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7'];
+                    const color = colors[i % colors.length];
+                    return (
+                      <button
+                        key={y}
+                        onClick={() => setVisibleYears(prev => ({ ...prev, [y]: !prev[y] }))}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${visibleYears[y] ? 'bg-white' : 'bg-gray-100 text-gray-400 border-gray-200'}`}
+                        style={{ borderColor: visibleYears[y] ? color : 'transparent' }}
+                      >
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: visibleYears[y] ? color : '#9ca3af' }}
+                        />
+                        {y}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {loadingSnowGraph ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="animate-spin text-4xl">⌛</div>
+                  </div>
+                ) : (
+                  <div className="flex-1 min-h-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={snowGraphData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis 
+                            dataKey="label" 
+                            interval={30} 
+                            tick={{fontSize: 12}}
+                        />
+                        <YAxis 
+                            unit='"' 
+                            label={{ value: 'Snowfall (inches)', angle: -90, position: 'insideLeft' }} 
+                        />
+                        <Tooltip 
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        />
+                        <Legend />
+                        {snowGraphYears.map((y, i) => {
+                            const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7'];
+                            return visibleYears[y] && (
+                                <Line 
+                                    key={y}
+                                    type="monotone" 
+                                    dataKey={y} 
+                                    stroke={colors[i % colors.length]} 
+                                    dot={false}
+                                    strokeWidth={2}
+                                    connectNulls
+                                    activeDot={{ r: 6 }}
+                                />
+                            );
+                        })}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 )}
               </div>
             </div>
