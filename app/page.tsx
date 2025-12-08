@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Snowflake, Droplets, Thermometer, Wind, Sunrise, Sunset, Clock, Search, MapPin, Calendar, History, RotateCcw } from 'lucide-react';
+import { Snowflake, Droplets, Thermometer, Wind, Sunrise, Sunset, Clock, Search, MapPin, Calendar, History, RotateCcw, ChevronLeft, ChevronRight, BarChart3, X } from 'lucide-react';
 
 // --- Configuration & Helpers ---
 
@@ -58,6 +58,12 @@ export default function App() {
   const [historicalAverages, setHistoricalAverages] = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  // Grid View State
+  const [showHistoryGrid, setShowHistoryGrid] = useState(false);
+  const [gridData, setGridData] = useState(null);
+  const [loadingGrid, setLoadingGrid] = useState(false);
+  const [gridMetric, setGridMetric] = useState('temp'); // 'temp', 'precip', 'snow'
+
   // Derived state for calendar generation
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -66,6 +72,11 @@ export default function App() {
   const firstDayOfMonth = new Date(year, month, 1).getDay();
 
   // --- Actions ---
+
+  const handleMonthChange = (increment) => {
+    const newDate = new Date(year, month + increment, 1);
+    setCurrentDate(newDate);
+  };
 
   const handleJumpToToday = () => {
     const today = new Date();
@@ -172,6 +183,58 @@ export default function App() {
       setLoadingHistory(false);
     }
   };
+
+  const fetchGridHistory = async () => {
+    if (gridData) return; // Don't refetch if we have data (unless location changes, handled by useEffect clearing)
+    
+    setLoadingGrid(true);
+    try {
+      const currentYear = new Date().getFullYear();
+      const years = [currentYear, currentYear - 1, currentYear - 2, currentYear - 3];
+      const startDate = `${years[years.length - 1]}-01-01`;
+      const endDate = `${years[0]}-12-31`;
+      
+      // Fetch 4 years of daily data
+      const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location.lat}&longitude=${location.lon}&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_mean,precipitation_sum,snowfall_sum&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
+      
+      const res = await fetch(url);
+      const data = await res.json();
+      
+      if (!data.daily) throw new Error('No data');
+
+      // Process data into monthly aggregates
+      const processed = {};
+      // Initialize structure: { monthIndex: { year: { temp: 0, precip: 0, snow: 0, count: 0 } } }
+      
+      data.daily.time.forEach((dateStr, i) => {
+        const date = new Date(dateStr);
+        const m = date.getMonth();
+        const y = date.getFullYear();
+        
+        if (!processed[m]) processed[m] = {};
+        if (!processed[m][y]) processed[m][y] = { tempSum: 0, precip: 0, snow: 0, count: 0 };
+        
+        const d = processed[m][y];
+        if (data.daily.temperature_2m_mean[i] !== null) {
+          d.tempSum += data.daily.temperature_2m_mean[i];
+          d.count++;
+        }
+        d.precip += data.daily.precipitation_sum[i] || 0;
+        d.snow += data.daily.snowfall_sum[i] || 0;
+      });
+
+      setGridData(processed);
+    } catch (err) {
+      console.error('Grid fetch failed', err);
+    } finally {
+      setLoadingGrid(false);
+    }
+  };
+
+  // Clear grid data when location changes
+  useEffect(() => {
+    setGridData(null);
+  }, [location]);
 
   // --- Data Fetching ---
 
@@ -336,34 +399,60 @@ export default function App() {
 
             {/* Month/Year Selector & Tools */}
             <div className="space-y-4">
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Month</label>
-                  <select
-                    value={month}
-                    onChange={(e) => setCurrentDate(new Date(year, parseInt(e.target.value), 1))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    {MONTHS.map((m, i) => (
-                      <option key={i} value={i}>{m}</option>
-                    ))}
-                  </select>
+              <div className="flex gap-2 items-center">
+                <button 
+                  onClick={() => handleMonthChange(-1)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                
+                <div className="flex-1 flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Month</label>
+                    <select
+                      value={month}
+                      onChange={(e) => setCurrentDate(new Date(year, parseInt(e.target.value), 1))}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      {MONTHS.map((m, i) => (
+                        <option key={i} value={i}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
+                    <select
+                      value={year}
+                      onChange={(e) => setCurrentDate(new Date(parseInt(e.target.value), month, 1))}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      {YEARS.map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
-                  <select
-                    value={year}
-                    onChange={(e) => setCurrentDate(new Date(parseInt(e.target.value), month, 1))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    {YEARS.map((y) => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                </div>
+
+                <button 
+                  onClick={() => handleMonthChange(1)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <ChevronRight size={20} />
+                </button>
               </div>
               
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setShowHistoryGrid(true);
+                    fetchGridHistory();
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                >
+                  <BarChart3 size={18} />
+                  History Grid
+                </button>
                 <button
                   onClick={handleJumpToToday}
                   className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
@@ -375,6 +464,94 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {/* History Grid Modal */}
+        {showHistoryGrid && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">Historical Analysis</h2>
+                  <p className="text-gray-600 text-sm">{location.name}</p>
+                </div>
+                <button 
+                  onClick={() => setShowHistoryGrid(false)}
+                  className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="p-6 overflow-auto flex-1">
+                <div className="flex gap-4 mb-6">
+                  <button
+                    onClick={() => setGridMetric('temp')}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${gridMetric === 'temp' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                    Avg Temperature
+                  </button>
+                  <button
+                    onClick={() => setGridMetric('precip')}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${gridMetric === 'precip' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                    Total Precipitation
+                  </button>
+                  <button
+                    onClick={() => setGridMetric('snow')}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${gridMetric === 'snow' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                    Total Snowfall
+                  </button>
+                </div>
+
+                {loadingGrid ? (
+                  <div className="flex justify-center py-12">
+                    <div className="animate-spin text-4xl">⌛</div>
+                  </div>
+                ) : gridData ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3">Month</th>
+                          <th className="px-6 py-3">This Year ({new Date().getFullYear()})</th>
+                          <th className="px-6 py-3">Last Year ({new Date().getFullYear() - 1})</th>
+                          <th className="px-6 py-3">2 Years Ago ({new Date().getFullYear() - 2})</th>
+                          <th className="px-6 py-3">3 Years Ago ({new Date().getFullYear() - 3})</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {MONTHS.map((monthName, mIndex) => {
+                          const currentYear = new Date().getFullYear();
+                          return (
+                            <tr key={monthName} className="bg-white border-b hover:bg-gray-50">
+                              <td className="px-6 py-4 font-medium text-gray-900">{monthName}</td>
+                              {[0, 1, 2, 3].map(offset => {
+                                const y = currentYear - offset;
+                                const d = gridData[mIndex]?.[y];
+                                let val = '-';
+                                if (d) {
+                                  if (gridMetric === 'temp') val = d.count ? (d.tempSum / d.count).toFixed(1) + '°F' : '-';
+                                  else if (gridMetric === 'precip') val = d.precip.toFixed(2) + '"';
+                                  else if (gridMetric === 'snow') val = d.snow.toFixed(1) + '"';
+                                }
+                                return (
+                                  <td key={offset} className="px-6 py-4">{val}</td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-center text-gray-500">No data available</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Calendar and Details */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
