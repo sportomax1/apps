@@ -192,11 +192,17 @@ export default function App() {
       const currentYear = new Date().getFullYear();
       const years = [currentYear, currentYear - 1, currentYear - 2, currentYear - 3];
       const startDate = `${years[years.length - 1]}-01-01`;
-      const endDate = `${years[0]}-12-31`;
+      
+      // Clamp endDate to yesterday to avoid future data errors in Archive API
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 5); // Archive API has ~5 day delay
+      const yesterdayStr = formatDateAPI(yesterday);
+      const endDate = yesterdayStr;
       
       // Fetch 4 years of daily data
       const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location.lat}&longitude=${location.lon}&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_mean,precipitation_sum,snowfall_sum&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
       
+      console.log('Fetching grid history:', url);
       const res = await fetch(url);
       const data = await res.json();
       
@@ -248,8 +254,16 @@ export default function App() {
         const endDate = new Date(year, month + 1, 0); 
 
         const startStr = formatDateAPI(startDate);
-        const endStr = formatDateAPI(endDate);
         
+        // Clamp end date for forecast API to avoid "out of range" errors
+        // Forecast API usually supports up to 14-16 days.
+        // If we are in the current month, we might be asking for dates too far in the future.
+        
+        let endStr = formatDateAPI(endDate);
+        const today = new Date();
+        const maxForecastDate = new Date();
+        maxForecastDate.setDate(today.getDate() + 14); // Safe margin for forecast
+
         let url = '';
         const tenDaysAgo = new Date();
         tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
@@ -262,9 +276,14 @@ export default function App() {
         if (isHistorical) {
              url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location.lat}&longitude=${location.lon}&start_date=${startStr}&end_date=${endStr}${params}`;
         } else {
+             // If using forecast API, ensure we don't ask for dates too far in the future
+             if (endDate > maxForecastDate) {
+                endStr = formatDateAPI(maxForecastDate);
+             }
              url = `https://api.open-meteo.com/v1/forecast?latitude=${location.lat}&longitude=${location.lon}&start_date=${startStr}&end_date=${endStr}${params}`;
         }
 
+        console.log('Fetching calendar data:', url);
         const response = await fetch(url);
         if (!response.ok) throw new Error('Weather data unavailable');
         const data = await response.json();
