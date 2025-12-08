@@ -65,12 +65,16 @@ export default function App() {
   const [loadingGrid, setLoadingGrid] = useState(false);
   const [gridMetric, setGridMetric] = useState('temp'); // 'temp', 'precip', 'snow'
 
-  // Snow Graph State
-  const [showSnowGraph, setShowSnowGraph] = useState(false);
-  const [snowGraphData, setSnowGraphData] = useState([]);
-  const [loadingSnowGraph, setLoadingSnowGraph] = useState(false);
-  const [snowGraphYears, setSnowGraphYears] = useState([]);
+  // Graph View State
+  const [showGraph, setShowGraph] = useState(false);
+  const [graphData, setGraphData] = useState(null); // { snow: [], temp: [], daylight: [] }
+  const [loadingGraph, setLoadingGraph] = useState(false);
+  const [graphYears, setGraphYears] = useState([]);
   const [visibleYears, setVisibleYears] = useState({});
+  const [graphMetric, setGraphMetric] = useState('snow'); // 'snow', 'temp', 'daylight'
+  const [visibleMonths, setVisibleMonths] = useState(
+    Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i, true]))
+  );
 
   // Derived state for calendar generation
   const year = currentDate.getFullYear();
@@ -248,17 +252,17 @@ export default function App() {
   // Clear grid data when location changes
   useEffect(() => {
     setGridData(null);
-    setSnowGraphData([]);
+    setGraphData(null);
   }, [location]);
 
-  const fetchSnowGraph = async () => {
-    if (snowGraphData.length > 0) return;
+  const fetchGraphData = async () => {
+    if (graphData) return;
     
-    setLoadingSnowGraph(true);
+    setLoadingGraph(true);
     try {
       const currentYear = new Date().getFullYear();
       const years = [currentYear, currentYear - 1, currentYear - 2, currentYear - 3, currentYear - 4];
-      setSnowGraphYears(years);
+      setGraphYears(years);
       
       // Initialize visible years (all true by default)
       const initialVisible = {};
@@ -272,32 +276,37 @@ export default function App() {
       yesterday.setDate(yesterday.getDate() - 5);
       const endDate = formatDateAPI(yesterday);
       
-      const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location.lat}&longitude=${location.lon}&start_date=${startDate}&end_date=${endDate}&daily=snowfall_sum&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
+      const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location.lat}&longitude=${location.lon}&start_date=${startDate}&end_date=${endDate}&daily=snowfall_sum,temperature_2m_max,daylight_duration&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
       
       const res = await fetch(url);
       const data = await res.json();
       
       if (!data.daily) throw new Error('No data');
 
-      // Create a base array of 366 days (using 2020 as leap year template)
-      const daysInYear = [];
-      const tempDate = new Date(2020, 0, 1); 
-      for (let i = 0; i < 366; i++) {
-        const m = tempDate.getMonth();
-        const d = tempDate.getDate();
-        const label = `${MONTHS[m].substring(0, 3)} ${d}`;
-        
-        const dayObj = {
-            label: label,
-            month: m,
-            day: d
-        };
-        // Initialize all years to 0 or null
-        years.forEach(y => dayObj[y] = null);
-        
-        daysInYear.push(dayObj);
-        tempDate.setDate(tempDate.getDate() + 1);
-      }
+      // Create base arrays for each metric
+      const createBaseArray = () => {
+        const arr = [];
+        const tempDate = new Date(2020, 0, 1); 
+        for (let i = 0; i < 366; i++) {
+          const m = tempDate.getMonth();
+          const d = tempDate.getDate();
+          const label = `${MONTHS[m].substring(0, 3)} ${d}`;
+          
+          const dayObj = {
+              label: label,
+              month: m,
+              day: d
+          };
+          years.forEach(y => dayObj[y] = null);
+          arr.push(dayObj);
+          tempDate.setDate(tempDate.getDate() + 1);
+        }
+        return arr;
+      };
+
+      const snowData = createBaseArray();
+      const tempData = createBaseArray();
+      const daylightData = createBaseArray();
 
       // Fill in data
       data.daily.time.forEach((dateStr, i) => {
@@ -308,19 +317,26 @@ export default function App() {
         
         if (!years.includes(y)) return;
 
-        const dayIndex = daysInYear.findIndex(item => item.month === m && item.day === d);
+        const dayIndex = snowData.findIndex(item => item.month === m && item.day === d);
 
         if (dayIndex !== -1) {
-            daysInYear[dayIndex][y] = data.daily.snowfall_sum[i];
+            snowData[dayIndex][y] = data.daily.snowfall_sum[i];
+            tempData[dayIndex][y] = data.daily.temperature_2m_max[i];
+            // Convert seconds to hours
+            daylightData[dayIndex][y] = data.daily.daylight_duration[i] ? (data.daily.daylight_duration[i] / 3600) : null;
         }
       });
 
-      setSnowGraphData(daysInYear);
+      setGraphData({
+        snow: snowData,
+        temp: tempData,
+        daylight: daylightData
+      });
 
     } catch (err) {
-      console.error('Snow graph fetch failed', err);
+      console.error('Graph fetch failed', err);
     } finally {
-      setLoadingSnowGraph(false);
+      setLoadingGraph(false);
     }
   };
 
@@ -546,13 +562,13 @@ export default function App() {
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => {
-                    setShowSnowGraph(true);
-                    fetchSnowGraph();
+                    setShowGraph(true);
+                    fetchGraphData();
                   }}
                   className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
                 >
                   <LineChartIcon size={18} />
-                  Snow Graph
+                  Graph View
                 </button>
                 <button
                   onClick={() => {
@@ -665,16 +681,17 @@ export default function App() {
         )}
 
         {/* Snow Graph Modal */}
-        {showSnowGraph && (
+        {/* Graph View Modal */}
+        {showGraph && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[80vh] flex flex-col">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col">
               <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-800">Snowfall Comparison</h2>
-                  <p className="text-gray-600 text-sm">{location.name} - Daily Snowfall Totals</p>
+                  <h2 className="text-2xl font-bold text-gray-800">Historical Trends</h2>
+                  <p className="text-gray-600 text-sm">{location.name} - Multi-Year Comparison</p>
                 </div>
                 <button 
-                  onClick={() => setShowSnowGraph(false)}
+                  onClick={() => setShowGraph(false)}
                   className="p-2 hover:bg-gray-200 rounded-full transition-colors"
                 >
                   <X size={24} />
@@ -682,36 +699,91 @@ export default function App() {
               </div>
               
               <div className="p-6 flex-1 flex flex-col min-h-0">
-                {/* Year Toggles */}
-                <div className="flex flex-wrap gap-4 mb-6">
-                  {snowGraphYears.map((y, i) => {
-                    const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7'];
-                    const color = colors[i % colors.length];
-                    return (
+                {/* Controls */}
+                <div className="flex flex-col gap-4 mb-6">
+                  {/* Metric Toggles */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setGraphMetric('snow')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${graphMetric === 'snow' ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                      Snowfall
+                    </button>
+                    <button
+                      onClick={() => setGraphMetric('temp')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${graphMetric === 'temp' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                      Max Temp
+                    </button>
+                    <button
+                      onClick={() => setGraphMetric('daylight')}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${graphMetric === 'daylight' ? 'bg-yellow-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                      Daylight
+                    </button>
+                  </div>
+
+                  {/* Year Toggles */}
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <span className="text-sm font-medium text-gray-500 mr-2">Years:</span>
+                    {graphYears.map((y, i) => {
+                      const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7'];
+                      const color = colors[i % colors.length];
+                      return (
+                        <button
+                          key={y}
+                          onClick={() => setVisibleYears(prev => ({ ...prev, [y]: !prev[y] }))}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${visibleYears[y] ? 'bg-white' : 'bg-gray-100 text-gray-400 border-gray-200'}`}
+                          style={{ borderColor: visibleYears[y] ? color : 'transparent' }}
+                        >
+                          <div 
+                            className="w-3 h-3 rounded-full" 
+                            style={{ backgroundColor: visibleYears[y] ? color : '#9ca3af' }}
+                          />
+                          {y}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Month Toggles */}
+                  <div className="flex flex-wrap gap-1 items-center">
+                    <span className="text-sm font-medium text-gray-500 mr-2">Months:</span>
+                    {MONTHS.map((m, i) => (
                       <button
-                        key={y}
-                        onClick={() => setVisibleYears(prev => ({ ...prev, [y]: !prev[y] }))}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${visibleYears[y] ? 'bg-white' : 'bg-gray-100 text-gray-400 border-gray-200'}`}
-                        style={{ borderColor: visibleYears[y] ? color : 'transparent' }}
+                        key={m}
+                        onClick={() => setVisibleMonths(prev => ({ ...prev, [i]: !prev[i] }))}
+                        className={`px-2 py-1 text-xs rounded border transition-colors ${visibleMonths[i] ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-400'}`}
                       >
-                        <div 
-                          className="w-3 h-3 rounded-full" 
-                          style={{ backgroundColor: visibleYears[y] ? color : '#9ca3af' }}
-                        />
-                        {y}
+                        {m.substring(0, 3)}
                       </button>
-                    );
-                  })}
+                    ))}
+                    <button 
+                        onClick={() => setVisibleMonths(Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i, true])))}
+                        className="ml-2 text-xs text-blue-600 hover:underline"
+                    >
+                        All
+                    </button>
+                    <button 
+                        onClick={() => setVisibleMonths(Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i, false])))}
+                        className="ml-2 text-xs text-blue-600 hover:underline"
+                    >
+                        None
+                    </button>
+                  </div>
                 </div>
 
-                {loadingSnowGraph ? (
+                {loadingGraph ? (
                   <div className="flex-1 flex items-center justify-center">
                     <div className="animate-spin text-4xl">⌛</div>
                   </div>
                 ) : (
                   <div className="flex-1 min-h-0">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={snowGraphData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                      <LineChart 
+                        data={graphData ? graphData[graphMetric].filter(d => visibleMonths[d.month]) : []} 
+                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                      >
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis 
                             dataKey="label" 
@@ -719,14 +791,18 @@ export default function App() {
                             tick={{fontSize: 12}}
                         />
                         <YAxis 
-                            unit='"' 
-                            label={{ value: 'Snowfall (inches)', angle: -90, position: 'insideLeft' }} 
+                            unit={graphMetric === 'temp' ? '°F' : graphMetric === 'daylight' ? 'h' : '"'} 
+                            label={{ 
+                                value: graphMetric === 'temp' ? 'Temperature (°F)' : graphMetric === 'daylight' ? 'Hours' : 'Snowfall (inches)', 
+                                angle: -90, 
+                                position: 'insideLeft' 
+                            }} 
                         />
                         <Tooltip 
                             contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                         />
                         <Legend />
-                        {snowGraphYears.map((y, i) => {
+                        {graphYears.map((y, i) => {
                             const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7'];
                             return visibleYears[y] && (
                                 <Line 
