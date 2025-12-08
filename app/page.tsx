@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { CloudSun } from 'lucide-react';
 
 export default function Home() {
   return (
@@ -11,8 +10,8 @@ export default function Home() {
           href="/weather"
           className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col items-center gap-4 group"
         >
-          <div className="p-4 bg-blue-100 text-blue-600 rounded-full group-hover:bg-blue-600 group-hover:text-white transition-colors">
-            <CloudSun size={48} />
+          <div className="p-4 bg-blue-100 text-blue-600 rounded-full group-hover:bg-blue-600 group-hover:text-white transition-colors text-5xl">
+            ☀️
           </div>
           <h2 className="text-xl font-semibold text-gray-800">Weather Forecast</h2>
           <p className="text-gray-600 text-center text-sm">
@@ -20,11 +19,31 @@ export default function Home() {
           </p>
         </Link>
 
-        {/* Placeholder for future apps */}
-        <div className="bg-gray-50 p-6 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-4 text-gray-400">
-          <div className="w-16 h-16 rounded-full bg-gray-200"></div>
-          <p className="font-medium">Coming Soon</p>
-        </div>
+        <a 
+          href="/sports.html"
+          className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col items-center gap-4 group"
+        >
+          <div className="p-4 bg-purple-100 text-purple-600 rounded-full group-hover:bg-purple-600 group-hover:text-white transition-colors text-5xl">
+            🏆
+          </div>
+          <h2 className="text-xl font-semibold text-gray-800">Sports Scoreboard</h2>
+          <p className="text-gray-600 text-center text-sm">
+            Emoji sports scoreboard with live ESPN data integration.
+          </p>
+        </a>
+
+        <Link 
+          href="/hello"
+          className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col items-center gap-4 group"
+        >
+          <div className="p-4 bg-green-100 text-green-600 rounded-full group-hover:bg-green-600 group-hover:text-white transition-colors text-5xl">
+            👋
+          </div>
+          <h2 className="text-xl font-semibold text-gray-800">Hello World</h2>
+          <p className="text-gray-600 text-center text-sm">
+            Simple test app to verify the multi-app setup.
+          </p>
+        </Link>
       </div>
     </div>
   );
