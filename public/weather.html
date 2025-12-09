@@ -8,61 +8,27 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- React & ReactDOM -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    
-    <!-- Babel for JSX -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Recharts -->
-    <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
-    
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
         }
+        .modal { z-index: 50; }
+        .modal-content { z-index: 51; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useEffect } = React;
-        const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
-
-        // Icon Wrapper Component
-        const Icon = ({ name, size = 24, className, ...props }) => {
-            useEffect(() => {
-                lucide.createIcons();
-            }, [name]);
-
-            return <i data-lucide={name} width={size} height={size} className={className} {...props}></i>;
-        };
-
-        // Map Lucide React component names to Lucide icon names (kebab-case)
-        const Snowflake = (props) => <Icon name="snowflake" {...props} />;
-        const Droplets = (props) => <Icon name="droplets" {...props} />;
-        const Thermometer = (props) => <Icon name="thermometer" {...props} />;
-        const Wind = (props) => <Icon name="wind" {...props} />;
-        const Sunrise = (props) => <Icon name="sunrise" {...props} />;
-        const Sunset = (props) => <Icon name="sunset" {...props} />;
-        const Clock = (props) => <Icon name="clock" {...props} />;
-        const Search = (props) => <Icon name="search" {...props} />;
-        const MapPin = (props) => <Icon name="map-pin" {...props} />;
-        const Calendar = (props) => <Icon name="calendar" {...props} />;
-        const History = (props) => <Icon name="history" {...props} />;
-        const RotateCcw = (props) => <Icon name="rotate-ccw" {...props} />;
-        const ChevronLeft = (props) => <Icon name="chevron-left" {...props} />;
-        const ChevronRight = (props) => <Icon name="chevron-right" {...props} />;
-        const BarChart3 = (props) => <Icon name="bar-chart-3" {...props} />;
-        const X = (props) => <Icon name="x" {...props} />;
-        const LineChartIcon = (props) => <Icon name="line-chart" {...props} />;
-
-        // --- Configuration & Helpers ---
+    <script>
+        // ----- WEATHER APP -----
+        const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        
+        const currentYear = new Date().getFullYear();
+        const YEARS = Array.from({ length: currentYear - 1990 + 2 }, (_, i) => currentYear + 1 - i);
 
         const DEFAULT_LOCATIONS = [
             { name: 'Parker, CO', lat: 39.5186, lon: -104.7614 },
@@ -73,1039 +39,888 @@
             { name: 'Clayton, NY', lat: 44.2395, lon: -76.0858 },
         ];
 
-        const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
-        // Generate years from 1990 to next year (extended range for historical data)
-        const currentYear = new Date().getFullYear();
-        const YEARS = Array.from({ length: currentYear - 1990 + 2 }, (_, i) => currentYear + 1 - i);
-
-        // Helper to format dates for API (YYYY-MM-DD)
-        const formatDateAPI = (date) => {
-            return date.toISOString().split('T')[0];
+        // State management
+        let appState = {
+            currentDate: new Date(),
+            selectedDate: new Date(),
+            locations: DEFAULT_LOCATIONS,
+            location: DEFAULT_LOCATIONS[0],
+            weatherData: {},
+            loading: false,
+            error: null,
+            searchQuery: '',
+            isSearching: false,
+            historicalAverages: null,
+            loadingHistory: false,
+            showHistoryGrid: false,
+            gridData: null,
+            loadingGrid: false,
+            gridMetric: 'temp',
+            showGraph: false,
+            graphData: null,
+            loadingGraph: false,
+            graphYears: [],
+            visibleYears: {},
+            graphMetric: 'snow',
+            visibleMonths: Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i, true])),
+            showSnowfall: true,
+            showPrecipitation: true,
+            isMobile: window.innerWidth < 768,
+            chartInstance: null
         };
 
-        // Helper to format ISO time strings to 'h:mm AM/PM'
-        const formatTime = (isoString) => {
+        function setState(updates) {
+            appState = { ...appState, ...updates };
+            render();
+        }
+
+        function formatDateAPI(date) {
+            return date.toISOString().split('T')[0];
+        }
+
+        function formatTime(isoString) {
             if (!isoString || !isoString.includes('T')) return 'N/A';
             const date = new Date(isoString);
             return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-        };
+        }
 
-        // Helper to format duration in seconds to 'Hh Mm'
-        const formatDuration = (seconds) => {
+        function formatDuration(seconds) {
             if (typeof seconds !== 'number' || seconds < 0) return 'N/A';
             const hours = Math.floor(seconds / 3600);
             const minutes = Math.floor((seconds % 3600) / 60);
             return `${hours}h ${minutes}m`;
-        };
+        }
 
-        // --- Components ---
+        // Handle month/year changes
+        function handleMonthChange(increment) {
+            const newDate = new Date(appState.currentDate);
+            newDate.setMonth(newDate.getMonth() + increment);
+            setState({ currentDate: newDate });
+            fetchWeatherData();
+        }
 
-        function App() {
-            const [currentDate, setCurrentDate] = useState(new Date());
-            const [selectedDate, setSelectedDate] = useState(new Date());
-            const [locations, setLocations] = useState(DEFAULT_LOCATIONS);
-            const [location, setLocation] = useState(DEFAULT_LOCATIONS[0]);
-            const [weatherData, setWeatherData] = useState({});
-            const [loading, setLoading] = useState(false);
-            const [error, setError] = useState(null);
+        function handleYearChange(increment) {
+            const newDate = new Date(appState.currentDate);
+            newDate.setFullYear(newDate.getFullYear() + increment);
+            setState({ currentDate: newDate });
+            fetchWeatherData();
+        }
+
+        function handleJumpToToday() {
+            const today = new Date();
+            setState({ currentDate: today, selectedDate: today });
+            fetchWeatherData();
+        }
+
+        function handleCurrentLocation() {
+            if (navigator.geolocation) {
+                setState({ loading: true });
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const newLoc = {
+                            name: 'My Location',
+                            lat: position.coords.latitude,
+                            lon: position.coords.longitude
+                        };
+                        const newLocations = [...appState.locations, newLoc];
+                        setState({ locations: newLocations, location: newLoc, loading: false });
+                        fetchWeatherData();
+                    },
+                    () => {
+                        setState({ error: 'Location access denied', loading: false });
+                    }
+                );
+            } else {
+                setState({ error: 'Geolocation not supported' });
+            }
+        }
+
+        function handleSearchLocation(e) {
+            e.preventDefault();
+            if (!appState.searchQuery.trim()) return;
+
+            setState({ isSearching: true });
+            fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(appState.searchQuery)}&count=1&language=en&format=json`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.results && data.results.length > 0) {
+                        const result = data.results[0];
+                        const newLoc = {
+                            name: `${result.name}, ${result.admin1 || result.country_code}`,
+                            lat: result.latitude,
+                            lon: result.longitude
+                        };
+                        const newLocations = [...appState.locations, newLoc];
+                        setState({ locations: newLocations, location: newLoc, searchQuery: '', isSearching: false });
+                        fetchWeatherData();
+                    } else {
+                        setState({ error: 'Location not found', isSearching: false });
+                    }
+                })
+                .catch(err => {
+                    setState({ error: 'Search failed', isSearching: false });
+                });
+        }
+
+        function fetchWeatherData() {
+            setState({ loading: true, error: null });
             
-            // Search & History State
-            const [searchQuery, setSearchQuery] = useState('');
-            const [isSearching, setIsSearching] = useState(false);
-            const [historicalAverages, setHistoricalAverages] = useState(null);
-            const [loadingHistory, setLoadingHistory] = useState(false);
-
-            // Grid View State
-            const [showHistoryGrid, setShowHistoryGrid] = useState(false);
-            const [gridData, setGridData] = useState(null);
-            const [loadingGrid, setLoadingGrid] = useState(false);
-            const [gridMetric, setGridMetric] = useState('temp'); // 'temp', 'precip', 'snow'
-
-            // Graph View State
-            const [showGraph, setShowGraph] = useState(false);
-            const [graphData, setGraphData] = useState(null); // { snow: [], temp: [], daylight: [] }
-            const [loadingGraph, setLoadingGraph] = useState(false);
-            const [graphYears, setGraphYears] = useState([]);
-            const [visibleYears, setVisibleYears] = useState({});
-            const [graphMetric, setGraphMetric] = useState('snow'); // 'snow', 'temp', 'daylight'
-            const [visibleMonths, setVisibleMonths] = useState(
-                Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i, true]))
-            );
-
-            // Calendar Data Visibility Toggles
-            const [showSnowfall, setShowSnowfall] = useState(true);
-            const [showPrecipitation, setShowPrecipitation] = useState(true);
-
-            // Mobile detection
-            const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-
-            // Derived state for calendar generation
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth();
+            const year = appState.currentDate.getFullYear();
+            const month = appState.currentDate.getMonth();
+            const startDate = formatDateAPI(new Date(year, month, 1));
+            const endDate = formatDateAPI(new Date(year, month + 1, 0));
             
+            const tenDaysAgo = new Date();
+            tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+            const isHistorical = new Date(year, month, 28) < tenDaysAgo;
+            
+            const params = `&daily=precipitation_sum,snowfall_sum,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,sunrise,sunset,daylight_duration&temperature_unit=fahrenheit&precipitation_unit=inch&wind_speed_unit=mph&timezone=auto`;
+            
+            let url = '';
+            if (isHistorical) {
+                url = `https://archive-api.open-meteo.com/v1/archive?latitude=${appState.location.lat}&longitude=${appState.location.lon}&start_date=${startDate}&end_date=${endDate}${params}`;
+            } else {
+                const maxForecastDate = new Date();
+                maxForecastDate.setDate(maxForecastDate.getDate() + 14);
+                const clampedEnd = new Date(endDate) > maxForecastDate ? formatDateAPI(maxForecastDate) : endDate;
+                url = `https://api.open-meteo.com/v1/forecast?latitude=${appState.location.lat}&longitude=${appState.location.lon}&start_date=${startDate}&end_date=${clampedEnd}${params}`;
+            }
+
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    const processed = {};
+                    if (data.daily && data.daily.time) {
+                        data.daily.time.forEach((time, index) => {
+                            processed[time] = {
+                                precipitation: data.daily.precipitation_sum[index],
+                                snowfall: data.daily.snowfall_sum[index],
+                                tempMax: data.daily.temperature_2m_max[index],
+                                tempMin: data.daily.temperature_2m_min[index],
+                                windSpeed: data.daily.wind_speed_10m_max[index],
+                                sunrise: data.daily.sunrise[index],
+                                sunset: data.daily.sunset[index],
+                                daylightDuration: data.daily.daylight_duration[index],
+                            };
+                        });
+                    }
+                    setState({ weatherData: processed, loading: false });
+                })
+                .catch(err => {
+                    setState({ error: err.message || 'Failed to fetch data', loading: false, weatherData: {} });
+                });
+        }
+
+        function fetchHistoricalComparison() {
+            setState({ loadingHistory: true, historicalAverages: null });
+            
+            const month = appState.selectedDate.getMonth() + 1;
+            const day = appState.selectedDate.getDate();
+            const currentYear = new Date().getFullYear();
+            
+            const yearsToFetch = [1, 3, 10];
+            const historyData = {};
+            let completed = 0;
+
+            yearsToFetch.forEach((yearsAgo) => {
+                const targetYear = currentYear - yearsAgo;
+                const dateStr = `${targetYear}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+                
+                const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${appState.location.lat}&longitude=${appState.location.lon}&start_date=${dateStr}&end_date=${dateStr}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
+                
+                fetch(url)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.daily && data.daily.time && data.daily.time.length > 0) {
+                            historyData[yearsAgo] = {
+                                year: targetYear,
+                                tempMax: data.daily.temperature_2m_max[0],
+                                tempMin: data.daily.temperature_2m_min[0],
+                                precip: data.daily.precipitation_sum[0],
+                                snow: data.daily.snowfall_sum[0]
+                            };
+                        }
+                        completed++;
+                        if (completed === yearsToFetch.length) {
+                            setState({ historicalAverages: historyData, loadingHistory: false });
+                        }
+                    });
+            });
+        }
+
+        function fetchGridHistory() {
+            if (appState.gridData) return;
+            
+            setState({ loadingGrid: true });
+            const currentYear = new Date().getFullYear();
+            const years = [currentYear, currentYear - 1, currentYear - 2, currentYear - 3];
+            const startDate = `${years[years.length - 1]}-01-01`;
+            
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 5);
+            const endDate = formatDateAPI(yesterday);
+            
+            const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${appState.location.lat}&longitude=${appState.location.lon}&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_mean,precipitation_sum,snowfall_sum&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
+            
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.daily) throw new Error('No data');
+
+                    const processed = {};
+                    data.daily.time.forEach((dateStr, i) => {
+                        const date = new Date(dateStr);
+                        const m = date.getMonth();
+                        const y = date.getFullYear();
+                        
+                        if (!processed[m]) processed[m] = {};
+                        if (!processed[m][y]) processed[m][y] = { tempSum: 0, precip: 0, snow: 0, count: 0 };
+                        
+                        const d = processed[m][y];
+                        if (data.daily.temperature_2m_mean[i] !== null) {
+                            d.tempSum += data.daily.temperature_2m_mean[i];
+                            d.count++;
+                        }
+                        d.precip += data.daily.precipitation_sum[i] || 0;
+                        d.snow += data.daily.snowfall_sum[i] || 0;
+                    });
+
+                    setState({ gridData: processed, loadingGrid: false });
+                })
+                .catch(err => {
+                    console.error('Grid fetch failed', err);
+                    setState({ loadingGrid: false });
+                });
+        }
+
+        function fetchGraphData() {
+            if (appState.graphData) return;
+            
+            setState({ loadingGraph: true });
+            const currentYear = new Date().getFullYear();
+            const years = [currentYear, currentYear - 1, currentYear - 2, currentYear - 3, currentYear - 4];
+            
+            const initialVisible = {};
+            years.forEach(y => initialVisible[y] = true);
+
+            const startDate = `${years[years.length - 1]}-01-01`;
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 5);
+            const endDate = formatDateAPI(yesterday);
+            
+            const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${appState.location.lat}&longitude=${appState.location.lon}&start_date=${startDate}&end_date=${endDate}&daily=snowfall_sum,temperature_2m_max,daylight_duration&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
+            
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.daily) throw new Error('No data');
+
+                    const createBaseArray = () => {
+                        const arr = [];
+                        const tempDate = new Date(2020, 0, 1); 
+                        for (let i = 0; i < 366; i++) {
+                            const m = tempDate.getMonth();
+                            const d = tempDate.getDate();
+                            const label = `${MONTHS[m].substring(0, 3)} ${d}`;
+                            
+                            const dayObj = { label, month: m, day: d };
+                            years.forEach(y => dayObj[y] = null);
+                            arr.push(dayObj);
+                            tempDate.setDate(tempDate.getDate() + 1);
+                        }
+                        return arr;
+                    };
+
+                    const snowData = createBaseArray();
+                    const tempData = createBaseArray();
+                    const daylightData = createBaseArray();
+
+                    data.daily.time.forEach((dateStr, i) => {
+                        const [yStr, mStr, dStr] = dateStr.split('-');
+                        const y = parseInt(yStr);
+                        const m = parseInt(mStr) - 1;
+                        const d = parseInt(dStr);
+                        
+                        if (!years.includes(y)) return;
+
+                        const dayIndex = snowData.findIndex(item => item.month === m && item.day === d);
+                        if (dayIndex !== -1) {
+                            snowData[dayIndex][y] = data.daily.snowfall_sum[i];
+                            tempData[dayIndex][y] = data.daily.temperature_2m_max[i];
+                            daylightData[dayIndex][y] = data.daily.daylight_duration[i] ? (data.daily.daylight_duration[i] / 3600) : null;
+                        }
+                    });
+
+                    setState({ 
+                        graphData: { snow: snowData, temp: tempData, daylight: daylightData },
+                        graphYears: years,
+                        visibleYears: initialVisible,
+                        loadingGraph: false 
+                    });
+                })
+                .catch(err => {
+                    console.error('Graph fetch failed', err);
+                    setState({ loadingGraph: false });
+                });
+        }
+
+        // Render calendar days
+        function renderCalendarDays() {
+            const year = appState.currentDate.getFullYear();
+            const month = appState.currentDate.getMonth();
             const daysInMonth = new Date(year, month + 1, 0).getDate();
             const firstDayOfMonth = new Date(year, month, 1).getDay();
 
-            // --- Actions ---
+            let html = '';
+            
+            for (let i = 0; i < firstDayOfMonth; i++) {
+                html += '<div class="aspect-square"></div>';
+            }
 
-            const handleMonthChange = (increment) => {
-                const newDate = new Date(year, month + increment, 1);
-                setCurrentDate(newDate);
-            };
-
-            const handleYearChange = (increment) => {
-                const newDate = new Date(year + increment, month, 1);
-                setCurrentDate(newDate);
-            };
-
-            const handleJumpToToday = () => {
-                const today = new Date();
-                setCurrentDate(today);
-                setSelectedDate(today);
-            };
-
-            const handleCurrentLocation = () => {
-                if (navigator.geolocation) {
-                setLoading(true);
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                    const newLoc = {
-                        name: 'My Location',
-                        lat: position.coords.latitude,
-                        lon: position.coords.longitude
-                    };
-                    setLocations(prev => [...prev, newLoc]);
-                    setLocation(newLoc);
-                    setLoading(false);
-                    },
-                    (err) => {
-                    setError('Location access denied');
-                    setLoading(false);
-                    }
-                );
-                } else {
-                setError('Geolocation not supported');
-                }
-            };
-
-            const handleSearchLocation = async (e) => {
-                e.preventDefault();
-                if (!searchQuery.trim()) return;
-
-                setIsSearching(true);
-                try {
-                const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchQuery)}&count=1&language=en&format=json`);
-                const data = await res.json();
-                
-                if (data.results && data.results.length > 0) {
-                    const result = data.results[0];
-                    const newLoc = {
-                    name: `${result.name}, ${result.admin1 || result.country_code}`,
-                    lat: result.latitude,
-                    lon: result.longitude
-                    };
-                    setLocations(prev => [...prev, newLoc]);
-                    setLocation(newLoc);
-                    setSearchQuery('');
-                } else {
-                    setError('Location not found');
-                }
-                } catch (err) {
-                setError('Search failed');
-                } finally {
-                setIsSearching(false);
-                }
-            };
-
-            const fetchHistoricalComparison = async () => {
-                setLoadingHistory(true);
-                setHistoricalAverages(null);
-                
-                try {
-                // Fetch last 10 years for the selected date
-                const month = selectedDate.getMonth() + 1;
-                const day = selectedDate.getDate();
-                const currentYear = new Date().getFullYear();
-                
-                const yearsToFetch = [1, 3, 10]; // 1 year ago, 3 years ago, 10 years ago
-                const historyData = {};
-
-                await Promise.all(yearsToFetch.map(async (yearsAgo) => {
-                    const targetYear = currentYear - yearsAgo;
-                    const dateStr = `${targetYear}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-                    
-                    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location.lat}&longitude=${location.lon}&start_date=${dateStr}&end_date=${dateStr}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
-                    
-                    const res = await fetch(url);
-                    const data = await res.json();
-                    
-                    if (data.daily && data.daily.time && data.daily.time.length > 0) {
-                    historyData[yearsAgo] = {
-                        year: targetYear,
-                        tempMax: data.daily.temperature_2m_max[0],
-                        tempMin: data.daily.temperature_2m_min[0],
-                        precip: data.daily.precipitation_sum[0],
-                        snow: data.daily.snowfall_sum[0]
-                    };
-                    }
-                }));
-
-                setHistoricalAverages(historyData);
-                } catch (err) {
-                console.error('Failed to fetch history', err);
-                } finally {
-                setLoadingHistory(false);
-                }
-            };
-
-            const fetchGridHistory = async () => {
-                if (gridData) return; // Don't refetch if we have data (unless location changes, handled by useEffect clearing)
-                
-                setLoadingGrid(true);
-                try {
-                const currentYear = new Date().getFullYear();
-                const years = [currentYear, currentYear - 1, currentYear - 2, currentYear - 3];
-                const startDate = `${years[years.length - 1]}-01-01`;
-                
-                // Clamp endDate to yesterday to avoid future data errors in Archive API
-                const yesterday = new Date();
-                yesterday.setDate(yesterday.getDate() - 5); // Archive API has ~5 day delay
-                const yesterdayStr = formatDateAPI(yesterday);
-                const endDate = yesterdayStr;
-                
-                // Fetch 4 years of daily data
-                const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location.lat}&longitude=${location.lon}&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_mean,precipitation_sum,snowfall_sum&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
-                
-                console.log('Fetching grid history:', url);
-                const res = await fetch(url);
-                const data = await res.json();
-                
-                if (!data.daily) throw new Error('No data');
-
-                // Process data into monthly aggregates
-                const processed = {};
-                // Initialize structure: { monthIndex: { year: { temp: 0, precip: 0, snow: 0, count: 0 } } }
-                
-                data.daily.time.forEach((dateStr, i) => {
-                    const date = new Date(dateStr);
-                    const m = date.getMonth();
-                    const y = date.getFullYear();
-                    
-                    if (!processed[m]) processed[m] = {};
-                    if (!processed[m][y]) processed[m][y] = { tempSum: 0, precip: 0, snow: 0, count: 0 };
-                    
-                    const d = processed[m][y];
-                    if (data.daily.temperature_2m_mean[i] !== null) {
-                    d.tempSum += data.daily.temperature_2m_mean[i];
-                    d.count++;
-                    }
-                    d.precip += data.daily.precipitation_sum[i] || 0;
-                    d.snow += data.daily.snowfall_sum[i] || 0;
-                });
-
-                setGridData(processed);
-                } catch (err) {
-                console.error('Grid fetch failed', err);
-                } finally {
-                setLoadingGrid(false);
-                }
-            };
-
-            // Clear grid data when location changes
-            useEffect(() => {
-                setGridData(null);
-                setGraphData(null);
-            }, [location]);
-
-            // Handle window resize for mobile detection
-            useEffect(() => {
-                const handleResize = () => {
-                    setIsMobile(window.innerWidth < 768);
-                };
-                
-                window.addEventListener('resize', handleResize);
-                return () => window.removeEventListener('resize', handleResize);
-            }, []);
-
-            const fetchGraphData = async () => {
-                if (graphData) return;
-                
-                setLoadingGraph(true);
-                try {
-                const currentYear = new Date().getFullYear();
-                const years = [currentYear, currentYear - 1, currentYear - 2, currentYear - 3, currentYear - 4];
-                setGraphYears(years);
-                
-                // Initialize visible years (all true by default)
-                const initialVisible = {};
-                years.forEach(y => initialVisible[y] = true);
-                setVisibleYears(initialVisible);
-
-                const startDate = `${years[years.length - 1]}-01-01`;
-                
-                // Clamp endDate to yesterday
-                const yesterday = new Date();
-                yesterday.setDate(yesterday.getDate() - 5);
-                const endDate = formatDateAPI(yesterday);
-                
-                const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location.lat}&longitude=${location.lon}&start_date=${startDate}&end_date=${endDate}&daily=snowfall_sum,temperature_2m_max,daylight_duration&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
-                
-                const res = await fetch(url);
-                const data = await res.json();
-                
-                if (!data.daily) throw new Error('No data');
-
-                // Create base arrays for each metric
-                const createBaseArray = () => {
-                    const arr = [];
-                    const tempDate = new Date(2020, 0, 1); 
-                    for (let i = 0; i < 366; i++) {
-                    const m = tempDate.getMonth();
-                    const d = tempDate.getDate();
-                    const label = `${MONTHS[m].substring(0, 3)} ${d}`;
-                    
-                    const dayObj = {
-                        label: label,
-                        month: m,
-                        day: d
-                    };
-                    years.forEach(y => dayObj[y] = null);
-                    arr.push(dayObj);
-                    tempDate.setDate(tempDate.getDate() + 1);
-                    }
-                    return arr;
-                };
-
-                const snowData = createBaseArray();
-                const tempData = createBaseArray();
-                const daylightData = createBaseArray();
-
-                // Fill in data
-                data.daily.time.forEach((dateStr, i) => {
-                    const [yStr, mStr, dStr] = dateStr.split('-');
-                    const y = parseInt(yStr);
-                    const m = parseInt(mStr) - 1;
-                    const d = parseInt(dStr);
-                    
-                    if (!years.includes(y)) return;
-
-                    const dayIndex = snowData.findIndex(item => item.month === m && item.day === d);
-
-                    if (dayIndex !== -1) {
-                        snowData[dayIndex][y] = data.daily.snowfall_sum[i];
-                        tempData[dayIndex][y] = data.daily.temperature_2m_max[i];
-                        // Convert seconds to hours
-                        daylightData[dayIndex][y] = data.daily.daylight_duration[i] ? (data.daily.daylight_duration[i] / 3600) : null;
-                    }
-                });
-
-                setGraphData({
-                    snow: snowData,
-                    temp: tempData,
-                    daylight: daylightData
-                });
-
-                } catch (err) {
-                console.error('Graph fetch failed', err);
-                } finally {
-                setLoadingGraph(false);
-                }
-            };
-
-            // --- Data Fetching ---
-
-            useEffect(() => {
-                const fetchData = async () => {
-                setLoading(true);
-                setError(null);
-                
-                try {
-                    const startDate = new Date(year, month, 1);
-                    const endDate = new Date(year, month + 1, 0); 
-
-                    const startStr = formatDateAPI(startDate);
-                    
-                    // Clamp end date for forecast API to avoid "out of range" errors
-                    // Forecast API usually supports up to 14-16 days.
-                    // If we are in the current month, we might be asking for dates too far in the future.
-                    
-                    let endStr = formatDateAPI(endDate);
-                    const today = new Date();
-                    const maxForecastDate = new Date();
-                    maxForecastDate.setDate(today.getDate() + 14); // Safe margin for forecast
-
-                    let url = '';
-                    const tenDaysAgo = new Date();
-                    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
-                    
-                    const isHistorical = endDate < tenDaysAgo;
-                    
-                    // Params for imperial units, including sun/daylight data
-                    const params = `&daily=precipitation_sum,snowfall_sum,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,sunrise,sunset,daylight_duration&temperature_unit=fahrenheit&precipitation_unit=inch&wind_speed_unit=mph&timezone=auto`;
-
-                    if (isHistorical) {
-                        url = `https://archive-api.open-meteo.com/v1/archive?latitude=${location.lat}&longitude=${location.lon}&start_date=${startStr}&end_date=${endStr}${params}`;
-                    } else {
-                        // If using forecast API, ensure we don't ask for dates too far in the future
-                        if (endDate > maxForecastDate) {
-                            endStr = formatDateAPI(maxForecastDate);
-                        }
-                        url = `https://api.open-meteo.com/v1/forecast?latitude=${location.lat}&longitude=${location.lon}&start_date=${startStr}&end_date=${endStr}${params}`;
-                    }
-
-                    console.log('Fetching calendar data:', url);
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error('Weather data unavailable');
-                    const data = await response.json();
-
-                    const processed = {};
-                    if (data.daily && data.daily.time) {
-                    data.daily.time.forEach((time, index) => {
-                        processed[time] = {
-                        precipitation: data.daily.precipitation_sum[index],
-                        snowfall: data.daily.snowfall_sum[index],
-                        tempMax: data.daily.temperature_2m_max[index],
-                        tempMin: data.daily.temperature_2m_min[index],
-                        windSpeed: data.daily.wind_speed_10m_max[index],
-                        sunrise: data.daily.sunrise[index],
-                        sunset: data.daily.sunset[index],
-                        daylightDuration: data.daily.daylight_duration[index],
-                        };
-                    });
-                    }
-
-                    setWeatherData(processed);
-                } catch (err) {
-                    setError(err.message || 'Failed to fetch data');
-                    setWeatherData({});
-                } finally {
-                    setLoading(false);
-                }
-                };
-
-                fetchData();
-            }, [year, month, location]);
-
-            // --- Render Helpers ---
-
-            const renderCalendarDays = () => {
-                const days = [];
-                
-                // Empty cells before month starts
-                for (let i = 0; i < firstDayOfMonth; i++) {
-                days.push(<div key={`empty-${i}`} className="aspect-square"></div>);
-                }
-
-                // Days of the month
-                for (let day = 1; day <= daysInMonth; day++) {
+            for (let day = 1; day <= daysInMonth; day++) {
                 const date = new Date(year, month, day);
                 const dateStr = formatDateAPI(date);
-                const isSelected = dateStr === formatDateAPI(selectedDate);
-                const data = weatherData[dateStr];
+                const isSelected = dateStr === formatDateAPI(appState.selectedDate);
+                const data = appState.weatherData[dateStr];
 
-                days.push(
+                html += `
                     <button
-                    key={day}
-                    onClick={() => setSelectedDate(date)}
-                    className={`
-                        aspect-square rounded-lg p-1 md:p-2 text-xs md:text-sm font-medium transition-colors flex flex-col items-center justify-start
+                    onclick="setState({ selectedDate: new Date('${dateStr}') })"
+                    class="aspect-square rounded-lg p-1 md:p-2 text-xs md:text-sm font-medium transition-colors flex flex-col items-center justify-start
                         ${isSelected ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}
-                        ${data?.precipitation > 0 || data?.snowfall > 0 ? 'ring-1 md:ring-2 ring-blue-400' : ''}
-                    `}
+                        ${data && (data.precipitation > 0 || data.snowfall > 0) ? 'ring-1 md:ring-2 ring-blue-400' : ''}
+                    "
                     >
-                    <div>{day}</div>
-                    {data && (
-                        <div className="text-[10px] md:text-xs mt-0.5 md:mt-1 leading-tight">
-                        {showSnowfall && data.snowfall > 0 && <div className="text-blue-600 font-bold">❄ {data.snowfall}"</div>}
-                        {showPrecipitation && data.precipitation > 0 && data.snowfall === 0 && <div className="text-blue-500 font-bold">💧 {data.precipitation}"</div>}
+                    <div>${day}</div>
+                    ${data ? `
+                        <div class="text-[10px] md:text-xs mt-0.5 md:mt-1 leading-tight">
+                        ${appState.showSnowfall && data.snowfall > 0 ? `<div class="text-blue-600 font-bold">❄ ${data.snowfall.toFixed(1)}"</div>` : ''}
+                        ${appState.showPrecipitation && data.precipitation > 0 && data.snowfall === 0 ? `<div class="text-blue-500 font-bold">💧 ${data.precipitation.toFixed(2)}"</div>` : ''}
                         </div>
-                    )}
+                    ` : ''}
                     </button>
-                );
-                }
+                `;
+            }
 
-                return days;
-            };
+            return html;
+        }
 
-            const selectedDateStr = formatDateAPI(selectedDate);
-            const selectedData = weatherData[selectedDateStr];
+        // Main render function
+        function render() {
+            const year = appState.currentDate.getFullYear();
+            const month = appState.currentDate.getMonth();
+            const selectedDateStr = formatDateAPI(appState.selectedDate);
+            const selectedData = appState.weatherData[selectedDateStr];
 
-            return (
-                <div className="min-h-screen bg-gradient-to-br from-blue-400 to-blue-600 p-4 md:p-8">
-                <div className="max-w-6xl mx-auto">
-                    {/* Header */}
-                    <div className="mb-6 md:mb-8">
-                    <h1 className="text-2xl md:text-4xl font-bold text-white mb-2">Weather Forecast</h1>
-                    <p className="text-blue-100 text-sm md:text-base">Historical and predicted weather data</p>
+            const html = `
+                <div class="min-h-screen bg-gradient-to-br from-blue-400 to-blue-600 p-4 md:p-8">
+                <div class="max-w-6xl mx-auto">
+                    <!-- Header -->
+                    <div class="mb-6 md:mb-8">
+                    <h1 class="text-2xl md:text-4xl font-bold text-white mb-2">Weather Forecast</h1>
+                    <p class="text-blue-100 text-sm md:text-base">Historical and predicted weather data</p>
                     </div>
 
-                    {/* Controls */}
-                    <div className="bg-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
-                    <div className="flex flex-col md:grid md:grid-cols-2 gap-6">
-                        {/* Location Selector & Search */}
-                        <div className="space-y-4">
-                        <div className="flex gap-2">
-                            <div className="flex-1">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
+                    <!-- Controls -->
+                    <div class="bg-white rounded-lg shadow-lg p-4 md:p-6 mb-6 md:mb-8">
+                    <div class="flex flex-col md:grid md:grid-cols-2 gap-6">
+                        <!-- Location Selector & Search -->
+                        <div class="space-y-4">
+                        <div class="flex gap-2">
+                            <div class="flex-1">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Location</label>
                             <select
-                                value={locations.indexOf(location)}
-                                onChange={(e) => setLocation(locations[parseInt(e.target.value)])}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                onchange="setState({ location: appState.locations[this.value] }); fetchWeatherData();"
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                             >
-                                {locations.map((loc, i) => (
-                                <option key={i} value={i}>{loc.name}</option>
-                                ))}
+                                ${appState.locations.map((loc, i) => `<option value="${i}" ${appState.location === loc ? 'selected' : ''}>${loc.name}</option>`).join('')}
                             </select>
                             </div>
-                            <div className="flex items-end">
+                            <div class="flex items-end">
                             <button
-                                onClick={handleCurrentLocation}
-                                className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+                                onclick="handleCurrentLocation()"
+                                class="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
                                 title="Use Current Location"
                             >
-                                <MapPin size={24} />
+                            📍
                             </button>
                             </div>
                         </div>
 
-                        <form onSubmit={handleSearchLocation} className="flex gap-2">
+                        <form onsubmit="handleSearchLocation(event)" class="flex gap-2">
                             <input
                             type="text"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            id="searchInput"
+                            value="${appState.searchQuery}"
+                            onchange="setState({ searchQuery: this.value })"
                             placeholder="Search city..."
-                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                             />
                             <button
                             type="submit"
-                            disabled={isSearching}
-                            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
+                            ${appState.isSearching ? 'disabled' : ''}
+                            class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
                             >
-                            {isSearching ? <div className="animate-spin">⌛</div> : <Search size={20} />}
+                            ${appState.isSearching ? '⌛' : '🔍'}
                             </button>
                         </form>
                         </div>
 
-                        {/* Month/Year Selector & Tools */}
-                        <div className="space-y-4">
-                        {/* Month Navigation */}
-                        <div className="flex gap-2 items-end">
+                        <!-- Month/Year Selector & Tools -->
+                        <div class="space-y-4">
+                        <!-- Month Navigation -->
+                        <div class="flex gap-2 items-end">
                             <button 
-                            onClick={() => handleMonthChange(-1)}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                            onclick="handleMonthChange(-1)"
+                            class="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
                             title="Previous Month"
                             >
-                            <ChevronLeft size={20} />
+                            ◀
                             </button>
                             
-                            <div className="flex-1">
-                                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">Month</label>
+                            <div class="flex-1">
+                                <label class="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">Month</label>
                                 <select
-                                value={month}
-                                onChange={(e) => setCurrentDate(new Date(year, parseInt(e.target.value), 1))}
-                                className="w-full px-2 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                                onchange="setState({ currentDate: new Date(${year}, this.value, 1) }); fetchWeatherData();"
+                                class="w-full px-2 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                                 >
-                                {MONTHS.map((m, i) => (
-                                    <option key={i} value={i}>{m}</option>
-                                ))}
+                                ${MONTHS.map((m, i) => `<option value="${i}" ${i === month ? 'selected' : ''}>${m}</option>`).join('')}
                                 </select>
                             </div>
 
                             <button 
-                            onClick={() => handleMonthChange(1)}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                            onclick="handleMonthChange(1)"
+                            class="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
                             title="Next Month"
                             >
-                            <ChevronRight size={20} />
+                            ▶
                             </button>
                         </div>
 
-                        {/* Year Navigation */}
-                        <div className="flex gap-2 items-end">
+                        <!-- Year Navigation -->
+                        <div class="flex gap-2 items-end">
                             <button 
-                            onClick={() => handleYearChange(-1)}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                            onclick="handleYearChange(-1)"
+                            class="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
                             title="Previous Year"
                             >
-                            <ChevronLeft size={20} />
+                            ◀
                             </button>
                             
-                            <div className="flex-1">
-                                <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">Year</label>
+                            <div class="flex-1">
+                                <label class="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">Year</label>
                                 <select
-                                value={year}
-                                onChange={(e) => setCurrentDate(new Date(parseInt(e.target.value), month, 1))}
-                                className="w-full px-2 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                                onchange="setState({ currentDate: new Date(this.value, ${month}, 1) }); fetchWeatherData();"
+                                class="w-full px-2 md:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                                 >
-                                {YEARS.map((y) => (
-                                    <option key={y} value={y}>{y}</option>
-                                ))}
+                                ${YEARS.map(y => `<option value="${y}" ${y === year ? 'selected' : ''}>${y}</option>`).join('')}
                                 </select>
                             </div>
 
                             <button 
-                            onClick={() => handleYearChange(1)}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                            onclick="handleYearChange(1)"
+                            class="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
                             title="Next Year"
                             >
-                            <ChevronRight size={20} />
+                            ▶
                             </button>
                         </div>
                         
-                        <div className="flex flex-col md:flex-row justify-end gap-2">
+                        <div class="flex flex-col md:flex-row justify-end gap-2">
                             <button
-                            onClick={() => {
-                                setShowGraph(true);
-                                fetchGraphData();
-                            }}
-                            className="flex items-center justify-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm md:text-base"
+                            onclick="setState({ showGraph: true }); fetchGraphData();"
+                            class="flex items-center justify-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm md:text-base"
                             >
-                            <LineChartIcon size={18} />
-                            Graph View
+                            📈 Graph View
                             </button>
                             <button
-                            onClick={() => {
-                                setShowHistoryGrid(true);
-                                fetchGridHistory();
-                            }}
-                            className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-sm md:text-base"
+                            onclick="setState({ showHistoryGrid: true }); fetchGridHistory();"
+                            class="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-sm md:text-base"
                             >
-                            <BarChart3 size={18} />
-                            History Grid
+                            📊 History Grid
                             </button>
                             <button
-                            onClick={handleJumpToToday}
-                            className="flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm md:text-base"
+                            onclick="handleJumpToToday()"
+                            class="flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm md:text-base"
                             >
-                            <RotateCcw size={18} />
-                            Jump to Today
+                            🔄 Jump to Today
                             </button>
                         </div>
                         </div>
                     </div>
                     </div>
 
-                    {/* History Grid Modal */}
-                    {showHistoryGrid && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col m-4">
-                        <div className="p-4 md:p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                            <div>
-                            <h2 className="text-xl md:text-2xl font-bold text-gray-800">Historical Analysis</h2>
-                            <p className="text-gray-600 text-xs md:text-sm">{location.name}</p>
-                            </div>
-                            <button 
-                            onClick={() => setShowHistoryGrid(false)}
-                            className="p-2 hover:bg-gray-200 rounded-full transition-colors"
-                            >
-                            <X size={24} />
-                            </button>
-                        </div>
-                        
-                        <div className="p-4 md:p-6 overflow-auto flex-1">
-                            <div className="flex flex-wrap gap-2 md:gap-4 mb-4 md:mb-6">
-                            <button
-                                onClick={() => setGridMetric('temp')}
-                                className={`px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${gridMetric === 'temp' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                            >
-                                Avg Temperature
-                            </button>
-                            <button
-                                onClick={() => setGridMetric('precip')}
-                                className={`px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${gridMetric === 'precip' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                            >
-                                Total Precipitation
-                            </button>
-                            <button
-                                onClick={() => setGridMetric('snow')}
-                                className={`px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${gridMetric === 'snow' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                            >
-                                Total Snowfall
-                            </button>
-                            </div>
-
-                            {loadingGrid ? (
-                            <div className="flex justify-center py-12">
-                                <div className="animate-spin text-4xl">⌛</div>
-                            </div>
-                            ) : gridData ? (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left">
-                                <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                                    <tr>
-                                    <th className="px-6 py-3">Month</th>
-                                    <th className="px-6 py-3">This Year ({new Date().getFullYear()})</th>
-                                    <th className="px-6 py-3">Last Year ({new Date().getFullYear() - 1})</th>
-                                    <th className="px-6 py-3">2 Years Ago ({new Date().getFullYear() - 2})</th>
-                                    <th className="px-6 py-3">3 Years Ago ({new Date().getFullYear() - 3})</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {MONTHS.map((monthName, mIndex) => {
-                                    const currentYear = new Date().getFullYear();
-                                    return (
-                                        <tr key={monthName} className="bg-white border-b hover:bg-gray-50">
-                                        <td className="px-6 py-4 font-medium text-gray-900">{monthName}</td>
-                                        {[0, 1, 2, 3].map(offset => {
-                                            const y = currentYear - offset;
-                                            const d = gridData[mIndex]?.[y];
-                                            let val = '-';
-                                            if (d) {
-                                            if (gridMetric === 'temp') val = d.count ? (d.tempSum / d.count).toFixed(1) + '°F' : '-';
-                                            else if (gridMetric === 'precip') val = d.precip.toFixed(2) + '"';
-                                            else if (gridMetric === 'snow') val = d.snow.toFixed(1) + '"';
-                                            }
-                                            return (
-                                            <td key={offset} className="px-6 py-4">{val}</td>
-                                            );
-                                        })}
-                                        </tr>
-                                    );
-                                    })}
-                                </tbody>
-                                </table>
-                            </div>
-                            ) : (
-                            <p className="text-center text-gray-500">No data available</p>
-                            )}
-                        </div>
-                        </div>
-                    </div>
-                    )}
-
-                    {/* Graph View Modal */}
-                    {showGraph && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col m-4">
-                        <div className="p-4 md:p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                            <div>
-                            <h2 className="text-xl md:text-2xl font-bold text-gray-800">Historical Trends</h2>
-                            <p className="text-gray-600 text-xs md:text-sm">{location.name} - Multi-Year Comparison</p>
-                            </div>
-                            <button 
-                            onClick={() => setShowGraph(false)}
-                            className="p-2 hover:bg-gray-200 rounded-full transition-colors"
-                            >
-                            <X size={24} />
-                            </button>
-                        </div>
-                        
-                        <div className="p-4 md:p-6 flex-1 flex flex-col min-h-0">
-                            {/* Controls */}
-                            <div className="flex flex-col gap-4 mb-4 md:mb-6">
-                            {/* Metric Toggles */}
-                            <div className="flex flex-wrap gap-2">
-                                <button
-                                onClick={() => setGraphMetric('snow')}
-                                className={`px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${graphMetric === 'snow' ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                                >
-                                Snowfall
-                                </button>
-                                <button
-                                onClick={() => setGraphMetric('temp')}
-                                className={`px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${graphMetric === 'temp' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                                >
-                                Max Temp
-                                </button>
-                                <button
-                                onClick={() => setGraphMetric('daylight')}
-                                className={`px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${graphMetric === 'daylight' ? 'bg-yellow-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                                >
-                                Daylight
-                                </button>
-                            </div>
-
-                            {/* Year Toggles */}
-                            <div className="flex flex-wrap gap-2 items-center">
-                                <span className="text-sm font-medium text-gray-500 mr-2">Years:</span>
-                                {graphYears.map((y, i) => {
-                                const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7'];
-                                const color = colors[i % colors.length];
-                                return (
-                                    <button
-                                    key={y}
-                                    onClick={() => setVisibleYears(prev => ({ ...prev, [y]: !prev[y] }))}
-                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${visibleYears[y] ? 'bg-white' : 'bg-gray-100 text-gray-400 border-gray-200'}`}
-                                    style={{ borderColor: visibleYears[y] ? color : 'transparent' }}
-                                    >
-                                    <div 
-                                        className="w-3 h-3 rounded-full" 
-                                        style={{ backgroundColor: visibleYears[y] ? color : '#9ca3af' }}
-                                    />
-                                    {y}
-                                    </button>
-                                );
-                                })}
-                            </div>
-
-                            {/* Month Toggles */}
-                            <div className="flex flex-wrap gap-1 items-center">
-                                <span className="text-sm font-medium text-gray-500 mr-2">Months:</span>
-                                {MONTHS.map((m, i) => (
-                                <button
-                                    key={m}
-                                    onClick={() => setVisibleMonths(prev => ({ ...prev, [i]: !prev[i] }))}
-                                    className={`px-2 py-1 text-xs rounded border transition-colors ${visibleMonths[i] ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-400'}`}
-                                >
-                                    {m.substring(0, 3)}
-                                </button>
-                                ))}
-                                <button 
-                                    onClick={() => setVisibleMonths(Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i, true])))}
-                                    className="ml-2 text-xs text-blue-600 hover:underline"
-                                >
-                                    All
-                                </button>
-                                <button 
-                                    onClick={() => setVisibleMonths(Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i, false])))}
-                                    className="ml-2 text-xs text-blue-600 hover:underline"
-                                >
-                                    None
-                                </button>
-                            </div>
-                            </div>
-
-                            {loadingGraph ? (
-                            <div className="flex-1 flex items-center justify-center">
-                                <div className="animate-spin text-4xl">⌛</div>
-                            </div>
-                            ) : (
-                            <div className="flex-1 min-h-0">
-                                <ResponsiveContainer width="100%" height="100%">
-                                <LineChart 
-                                    data={graphData ? graphData[graphMetric].filter(d => visibleMonths[d.month]) : []} 
-                                    margin={isMobile ? { top: 5, right: 5, left: 40, bottom: 60 } : { top: 5, right: 30, left: 20, bottom: 5 }}
-                                    layout={isMobile ? "vertical" : "horizontal"}
-                                >
-                                    <CartesianGrid strokeDasharray="3 3" vertical={!isMobile} />
-                                    {isMobile ? (
-                                        <>
-                                            <XAxis 
-                                                type="number"
-                                                unit={graphMetric === 'temp' ? '°F' : graphMetric === 'daylight' ? 'h' : '"'} 
-                                            />
-                                            <YAxis 
-                                                dataKey="label" 
-                                                type="category"
-                                                tick={{fontSize: 10}}
-                                                width={35}
-                                            />
-                                        </>
-                                    ) : (
-                                        <>
-                                            <XAxis 
-                                                dataKey="label" 
-                                                interval={30} 
-                                                tick={{fontSize: 12}}
-                                            />
-                                            <YAxis 
-                                                unit={graphMetric === 'temp' ? '°F' : graphMetric === 'daylight' ? 'h' : '"'} 
-                                                label={{ 
-                                                    value: graphMetric === 'temp' ? 'Temperature (°F)' : graphMetric === 'daylight' ? 'Hours' : 'Snowfall (inches)', 
-                                                    angle: -90, 
-                                                    position: 'insideLeft' 
-                                                }} 
-                                            />
-                                        </>
-                                    )}
-                                    <Tooltip 
-                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    />
-                                    <Legend />
-                                    {graphYears.map((y, i) => {
-                                        const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7'];
-                                        return visibleYears[y] && (
-                                            <Line 
-                                                key={y}
-                                                type="monotone" 
-                                                dataKey={y} 
-                                                stroke={colors[i % colors.length]} 
-                                                dot={false}
-                                                strokeWidth={2}
-                                                connectNulls
-                                                activeDot={{ r: 6 }}
-                                            />
-                                        );
-                                    })}
-                                </LineChart>
-                                </ResponsiveContainer>
-                            </div>
-                            )}
-                        </div>
-                        </div>
-                    </div>
-                    )}
-
-                    {/* Calendar and Details */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Calendar */}
-                    <div className="lg:col-span-2 bg-white rounded-lg shadow-lg p-6">
-                        <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-gray-800 mb-3">
-                            {MONTHS[month]} {year}
+                    <!-- Calendar and Details -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- Calendar -->
+                    <div class="lg:col-span-2 bg-white rounded-lg shadow-lg p-6">
+                        <div class="mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-3">
+                            ${MONTHS[month]} ${year}
                         </h2>
-                        <p className="text-gray-600 mb-4">Click on a day to see details</p>
+                        <p class="text-gray-600 mb-4">Click on a day to see details</p>
                         
-                        {/* Data Visibility Toggles */}
-                        <div className="flex flex-wrap gap-2 mb-4">
+                        <!-- Data Visibility Toggles -->
+                        <div class="flex flex-wrap gap-2 mb-4">
                             <button
-                            onClick={() => setShowSnowfall(!showSnowfall)}
-                            className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
-                                showSnowfall ? 'bg-blue-100 text-blue-700 border border-blue-300' : 'bg-gray-100 text-gray-500 border border-gray-300'
-                            }`}
+                            onclick="setState({ showSnowfall: !appState.showSnowfall })"
+                            class="px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
+                                appState.showSnowfall ? 'bg-blue-100 text-blue-700 border border-blue-300' : 'bg-gray-100 text-gray-500 border border-gray-300'
+                            }"
                             >
-                            ❄ Snowfall {showSnowfall ? '✓' : ''}
+                            ❄ Snowfall ${appState.showSnowfall ? '✓' : ''}
                             </button>
                             <button
-                            onClick={() => setShowPrecipitation(!showPrecipitation)}
-                            className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
-                                showPrecipitation ? 'bg-blue-100 text-blue-700 border border-blue-300' : 'bg-gray-100 text-gray-500 border border-gray-300'
-                            }`}
+                            onclick="setState({ showPrecipitation: !appState.showPrecipitation })"
+                            class="px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
+                                appState.showPrecipitation ? 'bg-blue-100 text-blue-700 border border-blue-300' : 'bg-gray-100 text-gray-500 border border-gray-300'
+                            }"
                             >
-                            💧 Precipitation {showPrecipitation ? '✓' : ''}
+                            💧 Precipitation ${appState.showPrecipitation ? '✓' : ''}
                             </button>
                         </div>
                         </div>
 
-                        {loading && <p className="text-gray-600">Loading weather data...</p>}
-                        {error && <p className="text-red-600">Error: {error}</p>}
+                        ${appState.loading ? '<p class="text-gray-600">Loading weather data...</p>' : ''}
+                        ${appState.error ? `<p class="text-red-600">Error: ${appState.error}</p>` : ''}
 
-                        {!loading && !error && (
-                        <div className="grid grid-cols-7 gap-1 md:gap-2">
-                            {DAYS_OF_WEEK.map((day) => (
-                            <div key={day} className="text-center font-semibold text-gray-600 text-xs md:text-sm mb-1 md:mb-2">
-                                {day}
-                            </div>
-                            ))}
-                            {renderCalendarDays()}
+                        ${!appState.loading && !appState.error ? `
+                        <div class="grid grid-cols-7 gap-1 md:gap-2">
+                            ${DAYS_OF_WEEK.map(day => `<div class="text-center font-semibold text-gray-600 text-xs md:text-sm mb-1 md:mb-2">${day}</div>`).join('')}
+                            ${renderCalendarDays()}
                         </div>
-                        )}
+                        ` : ''}
                     </div>
 
-                    {/* Details Panel */}
-                    <div className="bg-white rounded-lg shadow-lg p-6">
-                        <h3 className="text-xl font-bold text-gray-800 mb-4">
-                        {DAYS_OF_WEEK[selectedDate.getDay()]}, {MONTHS[selectedDate.getMonth()]} {selectedDate.getDate()}
+                    <!-- Details Panel -->
+                    <div class="bg-white rounded-lg shadow-lg p-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-4">
+                        ${DAYS_OF_WEEK[appState.selectedDate.getDay()]}, ${MONTHS[appState.selectedDate.getMonth()]} ${appState.selectedDate.getDate()}
                         </h3>
 
-                        {loading ? (
-                        <p className="text-gray-600">Loading...</p>
-                        ) : selectedData ? (
-                        <div className="space-y-4">
-                            <div className="flex items-center gap-2 p-3 bg-blue-50 rounded">
-                            <Thermometer className="text-red-500" />
+                        ${appState.loading ? '<p class="text-gray-600">Loading...</p>' : selectedData ? `
+                        <div class="space-y-4">
+                            <div class="flex items-center gap-2 p-3 bg-blue-50 rounded">
+                            <span class="text-2xl">🌡️</span>
                             <div>
-                                <p className="text-xs text-gray-600">Temperature</p>
-                                <p className="font-bold text-lg">{selectedData.tempMax}°F / {selectedData.tempMin}°F</p>
+                                <p class="text-xs text-gray-600">Temperature</p>
+                                <p class="font-bold text-lg">${selectedData.tempMax.toFixed(0)}°F / ${selectedData.tempMin.toFixed(0)}°F</p>
                             </div>
                             </div>
 
-                            <div className="flex items-center gap-2 p-3 bg-blue-50 rounded">
-                            <Droplets className="text-blue-500" />
+                            <div class="flex items-center gap-2 p-3 bg-blue-50 rounded">
+                            <span class="text-2xl">💧</span>
                             <div>
-                                <p className="text-xs text-gray-600">Precipitation</p>
-                                <p className="font-bold text-lg">{selectedData.precipitation}"</p>
+                                <p class="text-xs text-gray-600">Precipitation</p>
+                                <p class="font-bold text-lg">${selectedData.precipitation.toFixed(2)}"</p>
                             </div>
                             </div>
 
-                            <div className="flex items-center gap-2 p-3 bg-blue-50 rounded">
-                            <Snowflake className="text-blue-300" />
+                            <div class="flex items-center gap-2 p-3 bg-blue-50 rounded">
+                            <span class="text-2xl">❄️</span>
                             <div>
-                                <p className="text-xs text-gray-600">Snowfall</p>
-                                <p className="font-bold text-lg">{selectedData.snowfall}"</p>
+                                <p class="text-xs text-gray-600">Snowfall</p>
+                                <p class="font-bold text-lg">${selectedData.snowfall.toFixed(1)}"</p>
                             </div>
                             </div>
 
-                            <div className="flex items-center gap-2 p-3 bg-blue-50 rounded">
-                            <Wind className="text-gray-500" />
+                            <div class="flex items-center gap-2 p-3 bg-blue-50 rounded">
+                            <span class="text-2xl">💨</span>
                             <div>
-                                <p className="text-xs text-gray-600">Wind Speed</p>
-                                <p className="font-bold text-lg">{selectedData.windSpeed} mph</p>
+                                <p class="text-xs text-gray-600">Wind Speed</p>
+                                <p class="font-bold text-lg">${selectedData.windSpeed.toFixed(1)} mph</p>
                             </div>
                             </div>
 
-                            <div className="flex items-center gap-2 p-3 bg-orange-50 rounded">
-                            <Sunrise className="text-orange-500" />
+                            <div class="flex items-center gap-2 p-3 bg-orange-50 rounded">
+                            <span class="text-2xl">🌅</span>
                             <div>
-                                <p className="text-xs text-gray-600">Sunrise</p>
-                                <p className="font-bold text-lg">{formatTime(selectedData.sunrise)}</p>
+                                <p class="text-xs text-gray-600">Sunrise</p>
+                                <p class="font-bold text-lg">${formatTime(selectedData.sunrise)}</p>
                             </div>
                             </div>
 
-                            <div className="flex items-center gap-2 p-3 bg-orange-50 rounded">
-                            <Sunset className="text-orange-600" />
+                            <div class="flex items-center gap-2 p-3 bg-orange-50 rounded">
+                            <span class="text-2xl">🌇</span>
                             <div>
-                                <p className="text-xs text-gray-600">Sunset</p>
-                                <p className="font-bold text-lg">{formatTime(selectedData.sunset)}</p>
+                                <p class="text-xs text-gray-600">Sunset</p>
+                                <p class="font-bold text-lg">${formatTime(selectedData.sunset)}</p>
                             </div>
                             </div>
 
-                            <div className="flex items-center gap-2 p-3 bg-yellow-50 rounded">
-                            <Clock className="text-yellow-600" />
+                            <div class="flex items-center gap-2 p-3 bg-yellow-50 rounded">
+                            <span class="text-2xl">⏰</span>
                             <div>
-                                <p className="text-xs text-gray-600">Daylight</p>
-                                <p className="font-bold text-lg">{formatDuration(selectedData.daylightDuration)}</p>
+                                <p class="text-xs text-gray-600">Daylight</p>
+                                <p class="font-bold text-lg">${formatDuration(selectedData.daylightDuration)}</p>
                             </div>
+                            </div>
+
+                            <div class="mt-8 pt-6 border-t border-gray-200">
+                            <div class="flex items-center justify-between mb-4">
+                                <h4 class="font-bold text-gray-800">📜 Historical Context</h4>
+                                <button
+                                onclick="fetchHistoricalComparison()"
+                                ${appState.loadingHistory ? 'disabled' : ''}
+                                class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 disabled:opacity-50"
+                                >
+                                ${appState.loadingHistory ? 'Loading...' : 'Analyze History'}
+                                </button>
+                            </div>
+
+                            ${appState.historicalAverages ? `
+                                <div class="space-y-3">
+                                ${[1, 3, 10].map(yearsAgo => {
+                                    const data = appState.historicalAverages[yearsAgo];
+                                    return data ? `
+                                    <div class="text-sm bg-gray-50 p-2 rounded">
+                                        <div class="flex justify-between font-medium text-gray-700 mb-1">
+                                        <span>${data.year} (${yearsAgo}y ago)</span>
+                                        <span>${data.tempMax.toFixed(0)}° / ${data.tempMin.toFixed(0)}°</span>
+                                        </div>
+                                        <div class="flex gap-3 text-xs text-gray-500">
+                                        ${data.precip > 0 ? `<span>💧 ${data.precip.toFixed(2)}"</span>` : ''}
+                                        ${data.snow > 0 ? `<span>❄ ${data.snow.toFixed(1)}"</span>` : ''}
+                                        ${data.precip === 0 && data.snow === 0 ? '<span>No precip</span>' : ''}
+                                        </div>
+                                    </div>
+                                    ` : '';
+                                }).join('')}
+                                </div>
+                            ` : !appState.loadingHistory ? '<p class="text-xs text-gray-500 italic">Click "Analyze History" to compare this date with previous years (1y, 3y, 10y ago).</p>' : ''}
                             </div>
                         </div>
-                        ) : (
-                        <p className="text-gray-600">No data available for this date</p>
-                        )}
+                        ` : '<p class="text-gray-600">No data available for this date</p>'}
+                    </div>
+                    </div>
+                </div>
+                </div>
 
-                        {/* Historical Comparison Section */}
-                        <div className="mt-8 pt-6 border-t border-gray-200">
-                        <div className="flex items-center justify-between mb-4">
-                            <h4 className="font-bold text-gray-800 flex items-center gap-2">
-                            <History size={18} />
-                            Historical Context
-                            </h4>
+                ${appState.showHistoryGrid ? `
+                <div class="fixed inset-0 bg-black/50 flex items-center justify-center modal p-4">
+                    <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col modal-content m-4">
+                    <div class="p-4 md:p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                        <div>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Historical Analysis</h2>
+                        <p class="text-gray-600 text-xs md:text-sm">${appState.location.name}</p>
+                        </div>
+                        <button 
+                        onclick="setState({ showHistoryGrid: false })"
+                        class="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                        >
+                        ✕
+                        </button>
+                    </div>
+                    
+                    <div class="p-4 md:p-6 overflow-auto flex-1">
+                        <div class="flex flex-wrap gap-2 md:gap-4 mb-4 md:mb-6">
+                        <button
+                            onclick="setState({ gridMetric: 'temp' })"
+                            class="px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${appState.gridMetric === 'temp' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
+                        >
+                            Avg Temperature
+                        </button>
+                        <button
+                            onclick="setState({ gridMetric: 'precip' })"
+                            class="px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${appState.gridMetric === 'precip' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
+                        >
+                            Total Precipitation
+                        </button>
+                        <button
+                            onclick="setState({ gridMetric: 'snow' })"
+                            class="px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${appState.gridMetric === 'snow' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
+                        >
+                            Total Snowfall
+                        </button>
+                        </div>
+
+                        ${appState.loadingGrid ? '<div class="flex justify-center py-12"><div class="animate-spin text-4xl">⌛</div></div>' : appState.gridData ? `
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm text-left">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                <th class="px-6 py-3">Month</th>
+                                <th class="px-6 py-3">This Year (${new Date().getFullYear()})</th>
+                                <th class="px-6 py-3">Last Year (${new Date().getFullYear() - 1})</th>
+                                <th class="px-6 py-3">2 Years Ago (${new Date().getFullYear() - 2})</th>
+                                <th class="px-6 py-3">3 Years Ago (${new Date().getFullYear() - 3})</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${MONTHS.map((monthName, mIndex) => {
+                                    const currentYear = new Date().getFullYear();
+                                    return `
+                                    <tr class="bg-white border-b hover:bg-gray-50">
+                                    <td class="px-6 py-4 font-medium text-gray-900">${monthName}</td>
+                                    ${[0, 1, 2, 3].map(offset => {
+                                        const y = currentYear - offset;
+                                        const d = appState.gridData[mIndex]?.[y];
+                                        let val = '-';
+                                        if (d) {
+                                            if (appState.gridMetric === 'temp') val = d.count ? (d.tempSum / d.count).toFixed(1) + '°F' : '-';
+                                            else if (appState.gridMetric === 'precip') val = d.precip.toFixed(2) + '"';
+                                            else if (appState.gridMetric === 'snow') val = d.snow.toFixed(1) + '"';
+                                        }
+                                        return `<td class="px-6 py-4">${val}</td>`;
+                                    }).join('')}
+                                    </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                            </table>
+                        </div>
+                        ` : '<p class="text-center text-gray-500">No data available</p>'}
+                    </div>
+                    </div>
+                </div>
+                ` : ''}
+
+                ${appState.showGraph ? `
+                <div class="fixed inset-0 bg-black/50 flex items-center justify-center modal p-4">
+                    <div class="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col modal-content m-4">
+                    <div class="p-4 md:p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                        <div>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Historical Trends</h2>
+                        <p class="text-gray-600 text-xs md:text-sm">${appState.location.name} - Multi-Year Comparison</p>
+                        </div>
+                        <button 
+                        onclick="setState({ showGraph: false })"
+                        class="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                        >
+                        ✕
+                        </button>
+                    </div>
+                    
+                    <div class="p-4 md:p-6 flex-1 flex flex-col min-h-0">
+                        <div class="flex flex-col gap-4 mb-4 md:mb-6">
+                        <div class="flex flex-wrap gap-2">
                             <button
-                            onClick={fetchHistoricalComparison}
-                            disabled={loadingHistory}
-                            className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
+                            onclick="setState({ graphMetric: 'snow' })"
+                            class="px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${appState.graphMetric === 'snow' ? 'bg-cyan-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
                             >
-                            {loadingHistory ? 'Loading...' : 'Analyze History'}
+                            Snowfall
+                            </button>
+                            <button
+                            onclick="setState({ graphMetric: 'temp' })"
+                            class="px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${appState.graphMetric === 'temp' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
+                            >
+                            Max Temp
+                            </button>
+                            <button
+                            onclick="setState({ graphMetric: 'daylight' })"
+                            class="px-3 py-1.5 md:px-4 md:py-2 text-sm md:text-base rounded-lg font-medium transition-colors ${appState.graphMetric === 'daylight' ? 'bg-yellow-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
+                            >
+                            Daylight
                             </button>
                         </div>
 
-                        {historicalAverages && (
-                            <div className="space-y-3">
-                            {[1, 3, 10].map((yearsAgo) => {
-                                const data = historicalAverages[yearsAgo];
-                                if (!data) return null;
-                                return (
-                                <div key={yearsAgo} className="text-sm bg-gray-50 p-2 rounded">
-                                    <div className="flex justify-between font-medium text-gray-700 mb-1">
-                                    <span>{data.year} ({yearsAgo}y ago)</span>
-                                    <span>{data.tempMax}° / {data.tempMin}°</span>
-                                    </div>
-                                    <div className="flex gap-3 text-xs text-gray-500">
-                                    {data.precip > 0 && <span>💧 {data.precip}"</span>}
-                                    {data.snow > 0 && <span>❄ {data.snow}"</span>}
-                                    {data.precip === 0 && data.snow === 0 && <span>No precip</span>}
-                                    </div>
-                                </div>
-                                );
-                            })}
-                            </div>
-                        )}
-                        {!historicalAverages && !loadingHistory && (
-                            <p className="text-xs text-gray-500 italic">
-                            Click "Analyze History" to compare this date with previous years (1y, 3y, 10y ago).
-                            </p>
-                        )}
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <span class="text-sm font-medium text-gray-500 mr-2">Years:</span>
+                            ${appState.graphYears.map((y, i) => {
+                                const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7'];
+                                const color = colors[i % colors.length];
+                                return `
+                                <button
+                                onclick="setState({ visibleYears: { ...appState.visibleYears, ${y}: !appState.visibleYears[${y}] } }); renderChart();"
+                                class="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${appState.visibleYears[y] ? 'bg-white' : 'bg-gray-100 text-gray-400 border-gray-200'}"
+                                style="border-color: ${appState.visibleYears[y] ? color : 'transparent'}"
+                                >
+                                <div class="w-3 h-3 rounded-full" style="background-color: ${appState.visibleYears[y] ? color : '#9ca3af'}"></div>
+                                ${y}
+                                </button>
+                                `;
+                            }).join('')}
+                        </div>
+                        </div>
+
+                        <div id="chartContainer" class="flex-1 min-h-0">
+                            <canvas id="myChart"></canvas>
                         </div>
                     </div>
                     </div>
                 </div>
-                </div>
-            );
+                ` : ''}
+            `;
+
+            document.getElementById('root').innerHTML = html;
+
+            if (appState.showGraph) {
+                setTimeout(renderChart, 100);
+            }
         }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        function renderChart() {
+            if (!appState.graphData) return;
+
+            const ctx = document.getElementById('myChart');
+            if (!ctx) return;
+
+            if (appState.chartInstance) {
+                appState.chartInstance.destroy();
+            }
+
+            const data = appState.graphData[appState.graphMetric]
+                .filter(d => appState.visibleMonths[d.month]);
+
+            const datasets = appState.graphYears
+                .filter(y => appState.visibleYears[y])
+                .map((y, i) => {
+                    const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f97316', '#a855f7'];
+                    return {
+                        label: y.toString(),
+                        data: data.map(d => d[y]),
+                        borderColor: colors[i % colors.length],
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
+                    };
+                });
+
+            const isMobile = window.innerWidth < 768;
+
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.label),
+                    datasets: datasets
+                },
+                options: {
+                    indexAxis: isMobile ? 'y' : 'x',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: isMobile ? 'bottom' : 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            title: {
+                                display: true,
+                                text: appState.graphMetric === 'temp' ? 'Temperature (°F)' : appState.graphMetric === 'daylight' ? 'Hours' : 'Snowfall (inches)'
+                            }
+                        }
+                    }
+                }
+            });
+
+            appState.chartInstance = chart;
+        }
+
+        // Handle window resize for mobile detection
+        window.addEventListener('resize', () => {
+            const newIsMobile = window.innerWidth < 768;
+            if (newIsMobile !== appState.isMobile) {
+                setState({ isMobile: newIsMobile });
+            }
+        });
+
+        // Initial render
+        fetchWeatherData();
+        render();
     </script>
 </body>
 </html>
