@@ -152,9 +152,13 @@
         // Global State to hold the fetched data
         let currentEvents = []; 
 
-        // Set default date to today
+        // Set default date to today (local timezone)
         function setInitialDate() {
-             dateInput.value = new Date().toISOString().split('T')[0];
+             const today = new Date();
+             const year = today.getFullYear();
+             const month = String(today.getMonth() + 1).padStart(2, '0');
+             const day = String(today.getDate()).padStart(2, '0');
+             dateInput.value = `${year}-${month}-${day}`;
         }
 
         // ESPN Scoreboard API Endpoints

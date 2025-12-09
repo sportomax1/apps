@@ -76,9 +76,9 @@
         const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-        // Generate years from 2000 to next year
+        // Generate years from 1990 to next year (extended range for historical data)
         const currentYear = new Date().getFullYear();
-        const YEARS = Array.from({ length: currentYear - 2000 + 2 }, (_, i) => currentYear + 1 - i);
+        const YEARS = Array.from({ length: currentYear - 1990 + 2 }, (_, i) => currentYear + 1 - i);
 
         // Helper to format dates for API (YYYY-MM-DD)
         const formatDateAPI = (date) => {
@@ -133,6 +133,13 @@
             const [visibleMonths, setVisibleMonths] = useState(
                 Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i, true]))
             );
+
+            // Calendar Data Visibility Toggles
+            const [showSnowfall, setShowSnowfall] = useState(true);
+            const [showPrecipitation, setShowPrecipitation] = useState(true);
+
+            // Mobile detection
+            const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
             // Derived state for calendar generation
             const year = currentDate.getFullYear();
@@ -311,6 +318,16 @@
                 setGridData(null);
                 setGraphData(null);
             }, [location]);
+
+            // Handle window resize for mobile detection
+            useEffect(() => {
+                const handleResize = () => {
+                    setIsMobile(window.innerWidth < 768);
+                };
+                
+                window.addEventListener('resize', handleResize);
+                return () => window.removeEventListener('resize', handleResize);
+            }, []);
 
             const fetchGraphData = async () => {
                 if (graphData) return;
@@ -501,8 +518,8 @@
                     <div>{day}</div>
                     {data && (
                         <div className="text-[10px] md:text-xs mt-0.5 md:mt-1 leading-tight">
-                        {data.snowfall > 0 && <div className="text-blue-600 font-bold">❄ {data.snowfall}"</div>}
-                        {data.precipitation > 0 && data.snowfall === 0 && <div className="text-blue-500 font-bold">💧 {data.precipitation}"</div>}
+                        {showSnowfall && data.snowfall > 0 && <div className="text-blue-600 font-bold">❄ {data.snowfall}"</div>}
+                        {showPrecipitation && data.precipitation > 0 && data.snowfall === 0 && <div className="text-blue-500 font-bold">💧 {data.precipitation}"</div>}
                         </div>
                     )}
                     </button>
@@ -859,22 +876,40 @@
                                 <ResponsiveContainer width="100%" height="100%">
                                 <LineChart 
                                     data={graphData ? graphData[graphMetric].filter(d => visibleMonths[d.month]) : []} 
-                                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                                    margin={isMobile ? { top: 5, right: 5, left: 40, bottom: 60 } : { top: 5, right: 30, left: 20, bottom: 5 }}
+                                    layout={isMobile ? "vertical" : "horizontal"}
                                 >
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <XAxis 
-                                        dataKey="label" 
-                                        interval={30} 
-                                        tick={{fontSize: 12}}
-                                    />
-                                    <YAxis 
-                                        unit={graphMetric === 'temp' ? '°F' : graphMetric === 'daylight' ? 'h' : '"'} 
-                                        label={{ 
-                                            value: graphMetric === 'temp' ? 'Temperature (°F)' : graphMetric === 'daylight' ? 'Hours' : 'Snowfall (inches)', 
-                                            angle: -90, 
-                                            position: 'insideLeft' 
-                                        }} 
-                                    />
+                                    <CartesianGrid strokeDasharray="3 3" vertical={!isMobile} />
+                                    {isMobile ? (
+                                        <>
+                                            <XAxis 
+                                                type="number"
+                                                unit={graphMetric === 'temp' ? '°F' : graphMetric === 'daylight' ? 'h' : '"'} 
+                                            />
+                                            <YAxis 
+                                                dataKey="label" 
+                                                type="category"
+                                                tick={{fontSize: 10}}
+                                                width={35}
+                                            />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <XAxis 
+                                                dataKey="label" 
+                                                interval={30} 
+                                                tick={{fontSize: 12}}
+                                            />
+                                            <YAxis 
+                                                unit={graphMetric === 'temp' ? '°F' : graphMetric === 'daylight' ? 'h' : '"'} 
+                                                label={{ 
+                                                    value: graphMetric === 'temp' ? 'Temperature (°F)' : graphMetric === 'daylight' ? 'Hours' : 'Snowfall (inches)', 
+                                                    angle: -90, 
+                                                    position: 'insideLeft' 
+                                                }} 
+                                            />
+                                        </>
+                                    )}
                                     <Tooltip 
                                         contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                     />
@@ -908,10 +943,30 @@
                     {/* Calendar */}
                     <div className="lg:col-span-2 bg-white rounded-lg shadow-lg p-6">
                         <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-gray-800 mb-1">
+                        <h2 className="text-2xl font-bold text-gray-800 mb-3">
                             {MONTHS[month]} {year}
                         </h2>
-                        <p className="text-gray-600">Click on a day to see details</p>
+                        <p className="text-gray-600 mb-4">Click on a day to see details</p>
+                        
+                        {/* Data Visibility Toggles */}
+                        <div className="flex flex-wrap gap-2 mb-4">
+                            <button
+                            onClick={() => setShowSnowfall(!showSnowfall)}
+                            className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
+                                showSnowfall ? 'bg-blue-100 text-blue-700 border border-blue-300' : 'bg-gray-100 text-gray-500 border border-gray-300'
+                            }`}
+                            >
+                            ❄ Snowfall {showSnowfall ? '✓' : ''}
+                            </button>
+                            <button
+                            onClick={() => setShowPrecipitation(!showPrecipitation)}
+                            className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
+                                showPrecipitation ? 'bg-blue-100 text-blue-700 border border-blue-300' : 'bg-gray-100 text-gray-500 border border-gray-300'
+                            }`}
+                            >
+                            💧 Precipitation {showPrecipitation ? '✓' : ''}
+                            </button>
+                        </div>
                         </div>
 
                         {loading && <p className="text-gray-600">Loading weather data...</p>}
