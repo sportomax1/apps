@@ -148,6 +148,11 @@
                 setCurrentDate(newDate);
             };
 
+            const handleYearChange = (increment) => {
+                const newDate = new Date(year + increment, month, 1);
+                setCurrentDate(newDate);
+            };
+
             const handleJumpToToday = () => {
                 const today = new Date();
                 setCurrentDate(today);
@@ -568,15 +573,16 @@
 
                         {/* Month/Year Selector & Tools */}
                         <div className="space-y-4">
-                        <div className="flex gap-2 items-center">
+                        {/* Month Navigation */}
+                        <div className="flex gap-2 items-end">
                             <button 
                             onClick={() => handleMonthChange(-1)}
-                            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                            title="Previous Month"
                             >
                             <ChevronLeft size={20} />
                             </button>
                             
-                            <div className="flex-1 flex gap-2">
                             <div className="flex-1">
                                 <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">Month</label>
                                 <select
@@ -589,6 +595,26 @@
                                 ))}
                                 </select>
                             </div>
+
+                            <button 
+                            onClick={() => handleMonthChange(1)}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                            title="Next Month"
+                            >
+                            <ChevronRight size={20} />
+                            </button>
+                        </div>
+
+                        {/* Year Navigation */}
+                        <div className="flex gap-2 items-end">
+                            <button 
+                            onClick={() => handleYearChange(-1)}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                            title="Previous Year"
+                            >
+                            <ChevronLeft size={20} />
+                            </button>
+                            
                             <div className="flex-1">
                                 <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">Year</label>
                                 <select
@@ -601,11 +627,11 @@
                                 ))}
                                 </select>
                             </div>
-                            </div>
 
                             <button 
-                            onClick={() => handleMonthChange(1)}
-                            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                            onClick={() => handleYearChange(1)}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                            title="Next Year"
                             >
                             <ChevronRight size={20} />
                             </button>

@@ -1,4 +1,4 @@
-import Link from 'next/link';
+'use client';
 
 export default function Home() {
   return (
@@ -6,7 +6,7 @@ export default function Home() {
       <h1 className="text-4xl font-bold text-gray-900 mb-8">My Apps</h1>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl w-full">
-        <Link 
+        <a 
           href="/weather"
           className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col items-center gap-4 group"
         >
@@ -17,7 +17,7 @@ export default function Home() {
           <p className="text-gray-600 text-center text-sm">
             Historical and predicted weather data with detailed analysis tools.
           </p>
-        </Link>
+        </a>
 
         <a 
           href="/sports.html"
@@ -32,7 +32,7 @@ export default function Home() {
           </p>
         </a>
 
-        <Link 
+        <a 
           href="/hello"
           className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col items-center gap-4 group"
         >
@@ -43,7 +43,7 @@ export default function Home() {
           <p className="text-gray-600 text-center text-sm">
             Simple test app to verify the multi-app setup.
           </p>
-        </Link>
+        </a>
       </div>
     </div>
   );
