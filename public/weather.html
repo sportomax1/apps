@@ -529,30 +529,30 @@
                             </button>
                         </div>
                         
-                        <div class="flex flex-col md:flex-row justify-end gap-2">
+                        <div class="flex flex-row justify-end gap-1 md:gap-2 flex-wrap">
                             <button
                             onclick="setState({ showGraph: true }); fetchGraphData();"
-                            class="flex items-center justify-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm md:text-base"
+                            class="flex items-center justify-center gap-1 px-2 md:px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-xs md:text-base whitespace-nowrap"
                             >
                             📈 Graph View
                             </button>
                             <button
                             onclick="setState({ showHistoryGrid: true }); fetchGridHistory();"
-                            class="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-sm md:text-base"
+                            class="flex items-center justify-center gap-1 px-2 md:px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-xs md:text-base whitespace-nowrap"
                             >
                             📊 History Grid
                             </button>
                             <button
                             onclick="setState({ showThisDate: true }); fetchThisDateHistory();"
-                            class="flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-sm md:text-base"
+                            class="flex items-center justify-center gap-1 px-2 md:px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-xs md:text-base whitespace-nowrap"
                             >
                             📅 This Date
                             </button>
                             <button
                             onclick="handleJumpToToday()"
-                            class="flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm md:text-base"
+                            class="flex items-center justify-center gap-1 px-2 md:px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-xs md:text-base whitespace-nowrap"
                             >
-                            🔄 Jump to Today
+                            🔄 Jump
                             </button>
                         </div>
                         </div>
