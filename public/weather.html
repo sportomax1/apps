@@ -50,8 +50,9 @@
             error: null,
             searchQuery: '',
             isSearching: false,
-            historicalAverages: null,
-            loadingHistory: false,
+            showThisDate: false,
+            thisDateData: null,
+            loadingThisDate: false,
             showHistoryGrid: false,
             gridData: null,
             loadingGrid: false,
@@ -211,38 +212,40 @@
                 });
         }
 
-        function fetchHistoricalComparison() {
-            setState({ loadingHistory: true, historicalAverages: null });
+        function fetchThisDateHistory() {
+            setState({ loadingThisDate: true, thisDateData: null });
             
             const month = appState.selectedDate.getMonth() + 1;
             const day = appState.selectedDate.getDate();
             const currentYear = new Date().getFullYear();
             
-            const yearsToFetch = [1, 3, 10];
+            const yearsToFetch = Array.from({ length: 20 }, (_, i) => currentYear - i);
             const historyData = {};
             let completed = 0;
 
-            yearsToFetch.forEach((yearsAgo) => {
-                const targetYear = currentYear - yearsAgo;
+            yearsToFetch.forEach((targetYear) => {
                 const dateStr = `${targetYear}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
                 
-                const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${appState.location.lat}&longitude=${appState.location.lon}&start_date=${dateStr}&end_date=${dateStr}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
+                const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${appState.location.lat}&longitude=${appState.location.lon}&start_date=${dateStr}&end_date=${dateStr}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum,sunrise,sunset,daylight_duration&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
                 
                 fetch(url)
                     .then(res => res.json())
                     .then(data => {
                         if (data.daily && data.daily.time && data.daily.time.length > 0) {
-                            historyData[yearsAgo] = {
-                                year: targetYear,
+                            historyData[targetYear] = {
                                 tempMax: data.daily.temperature_2m_max[0],
                                 tempMin: data.daily.temperature_2m_min[0],
-                                precip: data.daily.precipitation_sum[0],
-                                snow: data.daily.snowfall_sum[0]
+                                precip: data.daily.precipitation_sum[0] || 0,
+                                snow: data.daily.snowfall_sum[0] || 0,
+                                sunrise: data.daily.sunrise[0],
+                                sunset: data.daily.sunset[0],
+                                daylight: data.daily.daylight_duration[0]
                             };
                         }
                         completed++;
                         if (completed === yearsToFetch.length) {
-                            setState({ historicalAverages: historyData, loadingHistory: false });
+                            const sortedData = yearsToFetch.filter(y => historyData[y]).map(y => ({ year: y, ...historyData[y] }));
+                            setState({ thisDateData: sortedData, loadingThisDate: false });
                         }
                     });
             });
@@ -656,38 +659,13 @@
                             </div>
                             </div>
 
-                            <div class="mt-8 pt-6 border-t border-gray-200">
-                            <div class="flex items-center justify-between mb-4">
-                                <h4 class="font-bold text-gray-800">📜 Historical Context</h4>
-                                <button
-                                onclick="fetchHistoricalComparison()"
-                                ${appState.loadingHistory ? 'disabled' : ''}
-                                class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 disabled:opacity-50"
-                                >
-                                ${appState.loadingHistory ? 'Loading...' : 'Analyze History'}
-                                </button>
-                            </div>
-
-                            ${appState.historicalAverages ? `
-                                <div class="space-y-3">
-                                ${[1, 3, 10].map(yearsAgo => {
-                                    const data = appState.historicalAverages[yearsAgo];
-                                    return data ? `
-                                    <div class="text-sm bg-gray-50 p-2 rounded">
-                                        <div class="flex justify-between font-medium text-gray-700 mb-1">
-                                        <span>${data.year} (${yearsAgo}y ago)</span>
-                                        <span>${data.tempMax.toFixed(0)}° / ${data.tempMin.toFixed(0)}°</span>
-                                        </div>
-                                        <div class="flex gap-3 text-xs text-gray-500">
-                                        ${data.precip > 0 ? `<span>💧 ${data.precip.toFixed(2)}"</span>` : ''}
-                                        ${data.snow > 0 ? `<span>❄ ${data.snow.toFixed(1)}"</span>` : ''}
-                                        ${data.precip === 0 && data.snow === 0 ? '<span>No precip</span>' : ''}
-                                        </div>
-                                    </div>
-                                    ` : '';
-                                }).join('')}
-                                </div>
-                            ` : !appState.loadingHistory ? '<p class="text-xs text-gray-500 italic">Click "Analyze History" to compare this date with previous years (1y, 3y, 10y ago).</p>' : ''}
+                            <div class="mt-6 pt-4">
+                            <button
+                            onclick="setState({ showThisDate: true }); fetchThisDateHistory();"
+                            class="w-full px-4 py-2.5 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors font-medium text-sm md:text-base"
+                            >
+                            📅 This Date (Last 20 Years)
+                            </button>
                             </div>
                         </div>
                         ` : '<p class="text-gray-600">No data available for this date</p>'}
@@ -836,6 +814,62 @@
                         <div id="chartContainer" class="flex-1 min-h-0">
                             <canvas id="myChart"></canvas>
                         </div>
+                    </div>
+                    </div>
+                </div>
+                ` : ''}
+
+                ${appState.showThisDate ? `
+                <div class="fixed inset-0 bg-black/50 flex items-center justify-center modal p-4">
+                    <div class="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col modal-content m-4">
+                    <div class="p-4 md:p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                        <div>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">This Date - Last 20 Years</h2>
+                        <p class="text-gray-600 text-xs md:text-sm">${MONTHS[appState.selectedDate.getMonth()]} ${appState.selectedDate.getDate()} at ${appState.location.name}</p>
+                        </div>
+                        <button 
+                        onclick="setState({ showThisDate: false })"
+                        class="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                        >
+                        ✕
+                        </button>
+                    </div>
+                    
+                    <div class="p-4 md:p-6 flex-1 overflow-auto">
+                        ${appState.loadingThisDate ? '<div class="flex justify-center py-12"><div class="animate-spin text-4xl">⌛</div></div>' : appState.thisDateData && appState.thisDateData.length > 0 ? `
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm text-left border-collapse">
+                            <thead class="sticky top-0 text-xs text-gray-700 uppercase bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                <th class="sticky left-0 bg-gray-50 px-3 md:px-6 py-3 font-semibold z-10 border-r border-gray-200">Year</th>
+                                <th class="px-3 md:px-6 py-3 font-semibold whitespace-nowrap">Hi/Lo Temp</th>
+                                <th class="px-3 md:px-6 py-3 font-semibold whitespace-nowrap">Precip + Snow</th>
+                                <th class="px-3 md:px-6 py-3 font-semibold whitespace-nowrap">Sunrise</th>
+                                <th class="px-3 md:px-6 py-3 font-semibold whitespace-nowrap">Sunset</th>
+                                <th class="px-3 md:px-6 py-3 font-semibold whitespace-nowrap">Daylight</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${appState.thisDateData.map(d => `
+                                <tr class="border-b border-gray-100 hover:bg-blue-50">
+                                <td class="sticky left-0 bg-white hover:bg-blue-50 px-3 md:px-6 py-3 font-bold text-gray-900 border-r border-gray-200">${d.year}</td>
+                                <td class="px-3 md:px-6 py-3 font-medium">${d.tempMax.toFixed(0)}° / ${d.tempMin.toFixed(0)}°</td>
+                                <td class="px-3 md:px-6 py-3">
+                                    <div class="flex flex-col gap-1">
+                                    ${d.precip > 0 ? `<div class="text-blue-600">💧 ${d.precip.toFixed(2)}"</div>` : ''}
+                                    ${d.snow > 0 ? `<div class="text-blue-500">❄ ${d.snow.toFixed(1)}"</div>` : ''}
+                                    ${d.precip === 0 && d.snow === 0 ? '<div class="text-gray-400 text-xs">—</div>' : ''}
+                                    </div>
+                                </td>
+                                <td class="px-3 md:px-6 py-3">${formatTime(d.sunrise)}</td>
+                                <td class="px-3 md:px-6 py-3">${formatTime(d.sunset)}</td>
+                                <td class="px-3 md:px-6 py-3">${formatDuration(d.daylight)}</td>
+                                </tr>
+                                `).join('')}
+                            </tbody>
+                            </table>
+                        </div>
+                        ` : '<p class="text-center text-gray-500 py-8">No data available</p>'}
                     </div>
                     </div>
                 </div>
