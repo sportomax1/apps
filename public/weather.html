@@ -543,6 +543,12 @@
                             📊 History Grid
                             </button>
                             <button
+                            onclick="setState({ showThisDate: true }); fetchThisDateHistory();"
+                            class="flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-sm md:text-base"
+                            >
+                            📅 This Date
+                            </button>
+                            <button
                             onclick="handleJumpToToday()"
                             class="flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm md:text-base"
                             >
@@ -657,15 +663,6 @@
                                 <p class="text-xs text-gray-600">Daylight</p>
                                 <p class="font-bold text-lg">${formatDuration(selectedData.daylightDuration)}</p>
                             </div>
-                            </div>
-
-                            <div class="mt-6 pt-4">
-                            <button
-                            onclick="setState({ showThisDate: true }); fetchThisDateHistory();"
-                            class="w-full px-4 py-2.5 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors font-medium text-sm md:text-base"
-                            >
-                            📅 This Date (Last 20 Years)
-                            </button>
                             </div>
                         </div>
                         ` : '<p class="text-gray-600">No data available for this date</p>'}
