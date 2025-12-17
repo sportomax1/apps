@@ -227,10 +227,12 @@
                 const dateStr = `${targetYear}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
                 
                 const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${appState.location.lat}&longitude=${appState.location.lon}&start_date=${dateStr}&end_date=${dateStr}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum,sunrise,sunset,daylight_duration&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto`;
+                console.log('fetchThisDateHistory: fetching', dateStr, url);
                 
                 fetch(url)
                     .then(res => res.json())
                     .then(data => {
+                        console.log('fetchThisDateHistory: response for', targetYear, data && data.daily && data.daily.time ? data.daily.time[0] : 'no-data');
                         if (data.daily && data.daily.time && data.daily.time.length > 0) {
                             historyData[targetYear] = {
                                 tempMax: data.daily.temperature_2m_max[0],
@@ -241,7 +243,18 @@
                                 sunset: data.daily.sunset[0],
                                 daylight: data.daily.daylight_duration[0]
                             };
+                        } else {
+                            console.warn('fetchThisDateHistory: no daily data for', targetYear, dateStr);
                         }
+                        completed++;
+                        if (completed === yearsToFetch.length) {
+                            const sortedData = yearsToFetch.filter(y => historyData[y]).map(y => ({ year: y, ...historyData[y] }));
+                            console.log('fetchThisDateHistory: completed, entries=', sortedData.length);
+                            setState({ thisDateData: sortedData, loadingThisDate: false });
+                        }
+                    })
+                    .catch(err => {
+                        console.error('fetchThisDateHistory: fetch error for', targetYear, err);
                         completed++;
                         if (completed === yearsToFetch.length) {
                             const sortedData = yearsToFetch.filter(y => historyData[y]).map(y => ({ year: y, ...historyData[y] }));
@@ -250,6 +263,25 @@
                     });
             });
         }
+
+        // Debug-friendly click handler for This Date button
+        function handleThisDateClick() {
+            console.log('handleThisDateClick: clicked - selectedDate=', appState.selectedDate, 'location=', appState.location);
+            try {
+                setState({ showThisDate: true });
+                fetchThisDateHistory();
+            } catch (err) {
+                console.error('handleThisDateClick: error', err);
+            }
+        }
+
+        // global error hook
+        window.addEventListener('error', function (event) {
+            console.error('Window error:', event.message, 'at', event.filename + ':' + event.lineno + ':' + event.colno, event.error);
+        });
+
+        // expose some debug helpers
+        window.__appState = function () { return appState; };
 
         function fetchGridHistory() {
             if (appState.gridData) return;
@@ -543,7 +575,7 @@
                             📊 History Grid
                             </button>
                             <button
-                            onclick="setState({ showThisDate: true }); fetchThisDateHistory();"
+                            onclick="handleThisDateClick()"
                             class="flex items-center justify-center gap-1 px-2 md:px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-xs md:text-base whitespace-nowrap"
                             >
                             📅 This Date
