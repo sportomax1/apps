@@ -13,10 +13,13 @@
 
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            font-family: var(--app-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif);
         }
         .modal { z-index: 50; }
         .modal-content { z-index: 51; }
+        
+        /* Font preloads for better performance */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;600;700&family=Lato:wght@400;700&family=Montserrat:wght@400;600;700&family=Poppins:wght@400;500;600;700&family=Raleway:wght@400;600;700&family=Ubuntu:wght@400;500;700&display=swap');
     </style>
 </head>
 <body>
@@ -29,6 +32,18 @@
         
         const currentYear = new Date().getFullYear();
         const YEARS = Array.from({ length: currentYear - 1990 + 2 }, (_, i) => currentYear + 1 - i);
+
+        const AVAILABLE_FONTS = [
+            { name: 'System Default', value: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
+            { name: 'Inter', value: '"Inter", sans-serif' },
+            { name: 'Roboto', value: '"Roboto", sans-serif' },
+            { name: 'Open Sans', value: '"Open Sans", sans-serif' },
+            { name: 'Lato', value: '"Lato", sans-serif' },
+            { name: 'Montserrat', value: '"Montserrat", sans-serif' },
+            { name: 'Poppins', value: '"Poppins", sans-serif' },
+            { name: 'Raleway', value: '"Raleway", sans-serif' },
+            { name: 'Ubuntu', value: '"Ubuntu", sans-serif' }
+        ];
 
         const DEFAULT_LOCATIONS = [
             { name: 'Parker, CO', lat: 39.5186, lon: -104.7614 },
@@ -67,11 +82,27 @@
             showSnowfall: true,
             showPrecipitation: true,
             isMobile: window.innerWidth < 768,
-            chartInstance: null
+            chartInstance: null,
+            showSettings: false,
+            selectedFont: localStorage.getItem('weatherAppFont') || AVAILABLE_FONTS[0].value,
+            vercelDeployUrl: localStorage.getItem('vercelDeployUrl') || '',
+            deployingVercel: false
         };
 
         function setState(updates) {
             appState = { ...appState, ...updates };
+            
+            // Apply font to document when font is changed
+            if (updates.selectedFont !== undefined) {
+                document.documentElement.style.setProperty('--app-font', updates.selectedFont);
+                localStorage.setItem('weatherAppFont', updates.selectedFont);
+            }
+            
+            // Save Vercel deploy URL when changed
+            if (updates.vercelDeployUrl !== undefined) {
+                localStorage.setItem('vercelDeployUrl', updates.vercelDeployUrl);
+            }
+            
             render();
         }
 
@@ -282,6 +313,30 @@
 
         // expose some debug helpers
         window.__appState = function () { return appState; };
+
+        function handleTriggerVercelDeploy() {
+            if (!appState.vercelDeployUrl) {
+                alert('Please configure your Vercel Deploy Hook URL in Settings first.');
+                setState({ showSettings: true });
+                return;
+            }
+            
+            setState({ deployingVercel: true });
+            
+            fetch(appState.vercelDeployUrl, { method: 'POST' })
+                .then(res => {
+                    if (res.ok) {
+                        alert('Deployment triggered successfully! Check Vercel dashboard for status.');
+                    } else {
+                        alert('Failed to trigger deployment. Please check your Deploy Hook URL.');
+                    }
+                    setState({ deployingVercel: false });
+                })
+                .catch(err => {
+                    alert('Error triggering deployment: ' + err.message);
+                    setState({ deployingVercel: false });
+                });
+        }
 
         function fetchGridHistory() {
             if (appState.gridData) return;
@@ -562,6 +617,13 @@
                         </div>
                         
                         <div class="flex flex-row justify-end gap-1 md:gap-2 flex-wrap">
+                            <button
+                            onclick="setState({ showSettings: true })"
+                            class="flex items-center justify-center gap-1 px-2 md:px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-xs md:text-base whitespace-nowrap"
+                            title="App Settings"
+                            >
+                            ⚙️ Settings
+                            </button>
                             <button
                             onclick="setState({ showGraph: true }); fetchGraphData();"
                             class="flex items-center justify-center gap-1 px-2 md:px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-xs md:text-base whitespace-nowrap"
@@ -903,6 +965,80 @@
                     </div>
                 </div>
                 ` : ''}
+
+                ${appState.showSettings ? `
+                <div class="fixed inset-0 bg-black/50 flex items-center justify-center modal p-4" style="z-index: 60;">
+                    <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col modal-content m-4" style="z-index: 61;">
+                    <div class="p-4 md:p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                        <div>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">⚙️ Settings</h2>
+                        <p class="text-gray-600 text-xs md:text-sm">Customize your weather app experience</p>
+                        </div>
+                        <button 
+                        onclick="setState({ showSettings: false })"
+                        class="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                        >
+                        ✕
+                        </button>
+                    </div>
+                    
+                    <div class="p-4 md:p-6 overflow-auto flex-1">
+                        <div class="space-y-6">
+                        <!-- Font Selection -->
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-800 mb-3">Font Family</h3>
+                            <p class="text-sm text-gray-600 mb-3">Choose your preferred font for the app</p>
+                            <select
+                            onchange="setState({ selectedFont: this.value })"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-base"
+                            >
+                            ${AVAILABLE_FONTS.map(font => `
+                                <option value="${font.value}" ${appState.selectedFont === font.value ? 'selected' : ''} style="font-family: ${font.value}">
+                                ${font.name}
+                                </option>
+                            `).join('')}
+                            </select>
+                            <div class="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-200" style="font-family: ${appState.selectedFont}">
+                            <p class="text-lg mb-2">Preview: The quick brown fox jumps over the lazy dog</p>
+                            <p class="text-2xl font-bold">1234567890 °F</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Vercel Deploy Hook -->
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-800 mb-3">Vercel Deployment</h3>
+                            <p class="text-sm text-gray-600 mb-3">Configure your Vercel Deploy Hook URL to enable one-click deployments</p>
+                            <div class="space-y-3">
+                            <input
+                                type="url"
+                                value="${appState.vercelDeployUrl}"
+                                oninput="setState({ vercelDeployUrl: this.value })"
+                                placeholder="https://api.vercel.com/v1/integrations/deploy/..."
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+                            />
+                            <button
+                                onclick="handleTriggerVercelDeploy()"
+                                ${appState.deployingVercel || !appState.vercelDeployUrl ? 'disabled' : ''}
+                                class="w-full px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                ${appState.deployingVercel ? '⌛ Triggering Deployment...' : '🚀 Trigger Vercel Deployment'}
+                            </button>
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                <p class="text-xs text-blue-800 font-medium mb-1">ℹ️ How to get your Deploy Hook URL:</p>
+                                <ol class="text-xs text-blue-700 space-y-1 ml-4 list-decimal">
+                                <li>Go to your Vercel project settings</li>
+                                <li>Navigate to "Git" → "Deploy Hooks"</li>
+                                <li>Create a new deploy hook for your branch</li>
+                                <li>Copy the generated URL and paste it above</li>
+                                </ol>
+                            </div>
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+                ` : ''}
             `;
 
             document.getElementById('root').innerHTML = html;
@@ -982,6 +1118,9 @@
         });
 
         // Initial render
+        // Apply saved font on load
+        document.documentElement.style.setProperty('--app-font', appState.selectedFont);
+        
         fetchWeatherData();
         render();
     </script>
