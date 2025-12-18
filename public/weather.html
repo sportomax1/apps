@@ -326,8 +326,14 @@
             // Validate that the URL is a Vercel deploy hook
             try {
                 const url = new URL(appState.vercelDeployUrl);
-                if (!url.hostname.endsWith('.vercel.com') && url.hostname !== 'vercel.com') {
-                    alert('Invalid Deploy Hook URL. Must be a vercel.com domain.');
+                // Vercel deploy hooks are always at api.vercel.com
+                if (url.hostname !== 'api.vercel.com') {
+                    alert('Invalid Deploy Hook URL. Must be from api.vercel.com');
+                    return;
+                }
+                // Ensure it's HTTPS
+                if (url.protocol !== 'https:') {
+                    alert('Deploy Hook URL must use HTTPS.');
                     return;
                 }
             } catch (e) {
@@ -337,8 +343,16 @@
             
             setState({ deployingVercel: true });
             
-            fetch(appState.vercelDeployUrl, { method: 'POST' })
+            // Create AbortController for timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+            
+            fetch(appState.vercelDeployUrl, { 
+                method: 'POST',
+                signal: controller.signal
+            })
                 .then(res => {
+                    clearTimeout(timeoutId);
                     if (res.ok) {
                         alert('Deployment triggered successfully! Check Vercel dashboard for status.');
                     } else {
@@ -347,8 +361,13 @@
                     setState({ deployingVercel: false });
                 })
                 .catch(err => {
+                    clearTimeout(timeoutId);
                     console.error('Deployment trigger error:', err);
-                    alert('Failed to trigger deployment. Please verify your Deploy Hook URL.');
+                    if (err.name === 'AbortError') {
+                        alert('Deployment request timed out. Please try again.');
+                    } else {
+                        alert('Failed to trigger deployment. Please verify your Deploy Hook URL.');
+                    }
                     setState({ deployingVercel: false });
                 });
         }
